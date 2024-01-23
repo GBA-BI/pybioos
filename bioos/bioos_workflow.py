@@ -125,7 +125,7 @@ class Bioos_workflow():
         # 生成veapi需要的输入结构
         unupdate_dict=inputs_list[0]
         for key,value in unupdate_dict.items():
-            unupdate_dict[key]=f'this.{key.split('.')[-1]}'
+            unupdate_dict[key]=f"this.{key.split('.')[-1]}"
 
         self.params_submit={
             'inputs':json.dumps(unupdate_dict),
