@@ -1,4 +1,5 @@
-from setuptools import setup, find_packages
+from setuptools import find_packages, setup
+
 from bioos.__about__ import __version__
 
 setup(
@@ -7,11 +8,9 @@ setup(
     keywords=["pip", "bioos"],
     description="BioOs SDK for Python",
     license="MIT Licence",
-
     url="https://github.com/GBA-BI/pybioos",
     author="Jilong Liu",
     author_email="liu_jilong@gzlab.ac.cn",
-
     packages=find_packages(),
     platforms="any",
     install_requires=[
@@ -22,6 +21,7 @@ setup(
         "tos==2.3.4",
         "cachetools>=5.2.0",
         "typing-extensions>=4.4.0",
+        "apscheduler>=3.10.4",
     ],
     classifiers=[
         "Programming Language :: Python :: 3",
@@ -30,4 +30,6 @@ setup(
         "Topic :: Scientific/Engineering :: Interface Engine/Protocol Translator"
     ],
     include_package_data=True,
-)
+    entry_points={
+        'console_scripts': ['bw=bioos.bioos_workflow:bioos_workflow']
+    })

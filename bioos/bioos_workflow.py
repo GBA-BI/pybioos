@@ -1,6 +1,8 @@
+import argparse
 import json
 import logging
 import os
+import time
 
 import pandas as pd
 
@@ -55,7 +57,7 @@ class Bioos_workflow:
         ser = df[df.Name == workspace_name].ID
         if len(ser) != 1:
             raise NotFoundError("Workspace", workspace_name)
-        workspace_id = ser[0]
+        workspace_id = ser.to_list()[0]
 
         self.ws = bioos.workspace(workspace_id)
         self.wf = self.ws.workflow(name=workflow_name)
@@ -75,9 +77,11 @@ class Bioos_workflow:
             # 这里如果多行记录，即多个样本的run中有相同的文件，可能会触发多次上传。可能可以通过判断文件是否存在来判断
             # 需要对file的存在性进行检验
             # 这里的target是prefix
+            self.logger.info(f"Start upload {value}.")
             self.ws.files.upload(value,
                                  target="input_provision/",
                                  flatten=True)
+            self.logger.info(f"Finish upload {value}.")
 
             s3_location = self.ws.files.s3_urls(target)[0]
             update_dict[key] = s3_location
@@ -158,10 +162,17 @@ class Bioos_workflow:
         for file in self.ws.files.list().key:
             for run in self.runs:
                 if run.submission in file:
+                    print(file)
+                    if "%" in file:
+                        continue
                     files.append(file)
 
         if download:
-            self.ws.files.download(files, ".", flatten=False)
+            try:
+                self.ws.files.download(files, ".", flatten=False)
+            except:  # noqa: E722
+                print('Some file can not download.')
+
             self.logger.info("Download finish.")
 
     def submit_workflow_bioosapi(self):
@@ -178,3 +189,96 @@ class Bioos_workflow:
 
         self.runs = runs
         return self.runs
+
+
+def bioos_workflow():
+
+    # argparse
+    parser = argparse.ArgumentParser(
+        description="Bio-OS instance platform workflow submitter program.")
+    parser.add_argument("--endpoint",
+                        type=str,
+                        help="Bio-OS instance platform endpoint",
+                        default="https://bio-top.miracle.ac.cn")
+    parser.add_argument(
+        "--ak",
+        type=str,
+        help="Access_key for your Bio-OS instance platform account.")
+    parser.add_argument(
+        "--sk",
+        type=str,
+        help="Secret_key for your Bio-OS instance platform account.")
+
+    parser.add_argument("--workspace_name",
+                        type=str,
+                        help="Target workspace name.")
+    parser.add_argument("--workflow_name",
+                        type=str,
+                        help="Target workflow name.")
+    parser.add_argument(
+        "--input_json",
+        type=str,
+        help="The input_json file in Cromwell Womtools format.")
+    parser.add_argument(
+        "--data_model_name",
+        type=str,
+        help=
+        "Intended name for the generated data_model on the Bio-OS instance platform workspace page.",
+        default="dm")
+    parser.add_argument(
+        "--call_caching",
+        action='store_true',
+        help="Call_caching for the submission run.",
+    )
+    parser.add_argument('--submission_desc',
+                        type=str,
+                        help="Description for the submission run.",
+                        default="Submit by pybioos.")
+
+    parser.add_argument(
+        "--monitor",
+        action='store_true',
+        help="Moniter the status of submission run until finishment.")
+    parser.add_argument(
+        "--monitor_interval",
+        type=int,
+        default=600,
+        help="Time interval for query the status for the submission runs.")
+    parser.add_argument(
+        "--download_results",
+        action='store_true',
+        help="Download the submission run result files to local current path.")
+
+    parsed_args = parser.parse_args()
+
+    # login and submit
+    bioos.login(endpoint=parsed_args.endpoint,
+                access_key=parsed_args.ak,
+                secret_key=parsed_args.sk)
+    bw = Bioos_workflow(workspace_name=parsed_args.workspace_name,
+                        workflow_name=parsed_args.workflow_name)
+    bw.preprocess(input_json_file=parsed_args.input_json,
+                  data_model_name=parsed_args.data_model_name,
+                  submission_desc=parsed_args.submission_desc,
+                  call_caching=parsed_args.call_caching)
+    bw.submit_workflow_bioosapi()
+
+    # moniter
+    def all_runs_done() -> bool:
+
+        statuses = []
+        for run in bw.runs:
+            statuses.append(True if run.status in ("Succeeded",
+                                                   "Failed") else False)
+
+        return all(statuses)
+
+    if parsed_args.monitor or parsed_args.download_results:
+        while not all_runs_done():
+            bw.logger.info("Monitoring submission run.")
+            print(bw.runs)
+            time.sleep(parsed_args.monitor_interval)
+            bw.monitor_workflow()
+
+        time.sleep(60)
+        bw.postprocess(download=parsed_args.download_results)
