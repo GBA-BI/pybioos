@@ -4,9 +4,9 @@ import threading
 from urllib.parse import urlparse
 
 from volcengine.ApiInfo import ApiInfo
+from volcengine.base.Service import Service
 from volcengine.Credentials import Credentials
 from volcengine.ServiceInfo import ServiceInfo
-from volcengine.base.Service import Service
 
 from bioos.errors import ParameterError
 
@@ -33,57 +33,100 @@ class BioOsService(Service):
         if not scheme or not hostname:
             raise ParameterError("ENDPOINT")
         service_info = ServiceInfo(hostname, {'Accept': 'application/json'},
-                                   Credentials('', '', 'bio', region), 5, 5, scheme=scheme)
+                                   Credentials('', '', 'bio', region),
+                                   5,
+                                   5,
+                                   scheme=scheme)
         return service_info
 
     @staticmethod
     def get_api_info():  #新增加的API接口可以配置到这里
         api_info = {
-            'ListWorkspaces': ApiInfo('POST', '/',
-                                      {'Action': 'ListWorkspaces', 'Version': '2021-03-04'}, {},
-                                      {}),
-
-            'CreateDataModel': ApiInfo('POST', '/',
-                                       {'Action': 'CreateDataModel', 'Version': '2021-03-04'}, {},
-                                       {}),
-            'ListDataModels': ApiInfo('POST', '/',
-                                      {'Action': 'ListDataModels', 'Version': '2021-03-04'}, {},
-                                      {}),
-            'ListDataModelRows': ApiInfo('POST', '/',
-                                         {'Action': 'ListDataModelRows', 'Version': '2021-03-04'},
-                                         {}, {}),
-            'ListAllDataModelRowIDs': ApiInfo('POST', '/',
-                                              {'Action': 'ListAllDataModelRowIDs',
-                                               'Version': '2021-03-04'}, {}, {}),
-            'DeleteDataModelRowsAndHeaders': ApiInfo('POST', '/',
-                                                     {'Action': 'DeleteDataModelRowsAndHeaders',
-                                                      'Version': '2021-03-04'}, {}, {}),
-            'ListWorkflows': ApiInfo('POST', '/',
-                                     {'Action': 'ListWorkflows', 'Version': '2021-03-04'}, {}, {}),
-            'CreateSubmission': ApiInfo('POST', '/',
-                                        {'Action': 'CreateSubmission', 'Version': '2021-03-04'}, {},
-                                        {}),
-            'ListSubmissions': ApiInfo('POST', '/',
-                                       {'Action': 'ListSubmissions', 'Version': '2021-03-04'}, {},
-                                       {}),
-            'DeleteSubmission': ApiInfo('POST', '/',
-                                        {'Action': 'DeleteSubmission', 'Version': '2021-03-04'}, {},
-                                        {}),
-            'ListRuns': ApiInfo('POST', '/', {'Action': 'ListRuns', 'Version': '2021-03-04'}, {},
-                                {}),
-            'ListTasks': ApiInfo('POST', '/', {'Action': 'ListTasks', 'Version': '2021-03-04'}, {},
-                                 {}),
-
-            'GetTOSAccess': ApiInfo('POST', '/',
-                                    {'Action': 'GetTOSAccess', 'Version': '2021-03-04'}, {}, {}),
-            'ListClustersOfWorkspace': ApiInfo('POST', '/', {'Action': 'ListClustersOfWorkspace',
-                                                             'Version': '2021-03-04'}, {}, {}),
-            'CreateWorkflow': ApiInfo('POST', '/', {'Action': 'CreateWorkflow',
-                                                    'Version': '2021-03-04'}, {}, {}),
-            'CheckCreateWorkflow': ApiInfo('POST', '/', {'Action': 'CheckCreateWorkflow',
-                                                         'Version': '2021-03-04'}, {}, {}),
-            'DeleteWorkflow': ApiInfo('POST', '/', {'Action': 'DeleteWorkflow',
-                                                    'Version': '2021-03-04'}, {}, {}),
+            'ListWorkspaces':
+            ApiInfo('POST', '/', {
+                'Action': 'ListWorkspaces',
+                'Version': '2021-03-04'
+            }, {}, {}),
+            'CreateDataModel':
+            ApiInfo('POST', '/', {
+                'Action': 'CreateDataModel',
+                'Version': '2021-03-04'
+            }, {}, {}),
+            'ListDataModels':
+            ApiInfo('POST', '/', {
+                'Action': 'ListDataModels',
+                'Version': '2021-03-04'
+            }, {}, {}),
+            'ListDataModelRows':
+            ApiInfo('POST', '/', {
+                'Action': 'ListDataModelRows',
+                'Version': '2021-03-04'
+            }, {}, {}),
+            'ListAllDataModelRowIDs':
+            ApiInfo('POST', '/', {
+                'Action': 'ListAllDataModelRowIDs',
+                'Version': '2021-03-04'
+            }, {}, {}),
+            'DeleteDataModelRowsAndHeaders':
+            ApiInfo('POST', '/', {
+                'Action': 'DeleteDataModelRowsAndHeaders',
+                'Version': '2021-03-04'
+            }, {}, {}),
+            'ListWorkflows':
+            ApiInfo('POST', '/', {
+                'Action': 'ListWorkflows',
+                'Version': '2021-03-04'
+            }, {}, {}),
+            'CreateSubmission':
+            ApiInfo('POST', '/', {
+                'Action': 'CreateSubmission',
+                'Version': '2021-03-04'
+            }, {}, {}),
+            'ListSubmissions':
+            ApiInfo('POST', '/', {
+                'Action': 'ListSubmissions',
+                'Version': '2021-03-04'
+            }, {}, {}),
+            'DeleteSubmission':
+            ApiInfo('POST', '/', {
+                'Action': 'DeleteSubmission',
+                'Version': '2021-03-04'
+            }, {}, {}),
+            'ListRuns':
+            ApiInfo('POST', '/', {
+                'Action': 'ListRuns',
+                'Version': '2021-03-04'
+            }, {}, {}),
+            'ListTasks':
+            ApiInfo('POST', '/', {
+                'Action': 'ListTasks',
+                'Version': '2021-03-04'
+            }, {}, {}),
+            'GetTOSAccess':
+            ApiInfo('POST', '/', {
+                'Action': 'GetTOSAccess',
+                'Version': '2021-03-04'
+            }, {}, {}),
+            'ListClustersOfWorkspace':
+            ApiInfo('POST', '/', {
+                'Action': 'ListClustersOfWorkspace',
+                'Version': '2021-03-04'
+            }, {}, {}),
+            'CreateWorkflow':
+            ApiInfo('POST', '/', {
+                'Action': 'CreateWorkflow',
+                'Version': '2021-03-04'
+            }, {}, {}),
+            'CheckCreateWorkflow':
+            ApiInfo('POST', '/', {
+                'Action': 'CheckCreateWorkflow',
+                'Version': '2021-03-04'
+            }, {}, {}),
+            'DeleteWorkflow':
+            ApiInfo('POST', '/', {
+                'Action': 'DeleteWorkflow',
+                'Version': '2021-03-04'
+            }, {}, {}),
         }
         return api_info
 
@@ -139,7 +182,9 @@ class BioOsService(Service):
         return self.__request("DeleteWorkflow", params)
 
     def __request(self, action, params):
-        res = self.json(action, dict(), json.dumps(params))    # 这里的json来源于其父类，是字节Service中的函数。处理的是和后端交互后的返回值
+        res = self.json(
+            action, dict(),
+            json.dumps(params))  # 这里的json来源于其父类，是字节Service中的函数。处理的是和后端交互后的返回值
         if res == '':
             raise Exception('empty response')
         res_json = json.loads(res)

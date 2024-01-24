@@ -28,7 +28,8 @@ class UtilityResource(metaclass=SingletonType):
         pass
 
     @staticmethod
-    def json_transfer(json_: Union[str, Iterable[str]]) -> Union[str, Iterable[str]]:
+    def json_transfer(
+            json_: Union[str, Iterable[str]]) -> Union[str, Iterable[str]]:
         """Convert the local JSON to meet the requirements of MiracleCloud
 
         *Example*:

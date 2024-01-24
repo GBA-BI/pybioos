@@ -1,13 +1,13 @@
 from datetime import datetime
 from typing import List
-from typing_extensions import Literal
 
 import pandas as pd
-from cachetools import cached, TTLCache
+from cachetools import TTLCache, cached
 from pandas import DataFrame
+from typing_extensions import Literal
 
 from bioos.config import Config
-from bioos.errors import ParameterError, ConflictError, NotFoundError
+from bioos.errors import ConflictError, NotFoundError, ParameterError
 from bioos.resource.data_models import DataModelResource
 from bioos.utils import workflows
 from bioos.utils.common_tools import SingletonType, dict_str, is_json
@@ -64,7 +64,7 @@ class Run(metaclass=SingletonType):  # 单例模式，why
         self._finish_time = 0
         self._status = UNKNOWN
         self._tasks: pd.DataFrame = None
-        self.sync() # 这里会初始化上方的UNKNOWN
+        self.sync()  # 这里会初始化上方的UNKNOWN
 
     @property
     def status(self) -> RUN_STATUS:
@@ -73,7 +73,7 @@ class Run(metaclass=SingletonType):  # 单例模式，why
         :return: Run status
         :rtype: Literal["Succeeded", "Failed", "Running", "Pending"]
         """
-        if self._status in ("Succeeded", "Failed"): #判断是否已结束流程，只有在结束前才会触发查询
+        if self._status in ("Succeeded", "Failed"):  #判断是否已结束流程，只有在结束前才会触发查询
             return self._status
         self.sync()
         return self._status
@@ -165,7 +165,9 @@ class Run(metaclass=SingletonType):  # 单例模式，why
         resp = Config.service().list_runs({
             "SubmissionID": self.submission,
             "WorkspaceID": self.workspace_id,
-            "Filter": {"IDs": [self.id]},
+            "Filter": {
+                "IDs": [self.id]
+            },
         })
         # not found runs
         if len(resp.get("Items")) != 1:
@@ -183,7 +185,7 @@ class Run(metaclass=SingletonType):  # 单例模式，why
             self._error = item.get("Message")
 
 
-class Submission(metaclass=SingletonType): # 与run class行为相同
+class Submission(metaclass=SingletonType):  # 与run class行为相同
     """Represents a submission of a workflow .
     """
 
@@ -230,8 +232,9 @@ class Submission(metaclass=SingletonType): # 与run class行为相同
             "SubmissionID": self.id,
             'PageSize': 0
         }).get("Items")
-        self.runs = [Run(self.workspace_id, run.get("ID"), self.id) for
-                     run in runs]
+        self.runs = [
+            Run(self.workspace_id, run.get("ID"), self.id) for run in runs
+        ]
         self.sync()
 
     @property
@@ -247,7 +250,7 @@ class Submission(metaclass=SingletonType): # 与run class行为相同
         return self._finish_time
 
     @property
-    def status(self) -> SUBMISSION_STATUS: #Literal 在这里的作用是做类型标注
+    def status(self) -> SUBMISSION_STATUS:  #Literal 在这里的作用是做类型标注
         """Returns the Submission status.
 
         :return: Submission status
@@ -264,7 +267,9 @@ class Submission(metaclass=SingletonType): # 与run class行为相同
         """
         resp = Config.service().list_submissions({
             "WorkspaceID": self.workspace_id,
-            "Filter": {"IDs": [self.id]},
+            "Filter": {
+                "IDs": [self.id]
+            },
             # "ID": self.id,
         })
         # not found submission
@@ -284,7 +289,8 @@ class Submission(metaclass=SingletonType): # 与run class行为相同
         self.data_model_rows = list(data_entity_row_ids)
         # get data model name by call list data models
         models = Config.service().list_data_models({
-            'WorkspaceID': self.workspace_id,
+            'WorkspaceID':
+            self.workspace_id,
         }).get("Items")
         for model in models:
             if model["ID"] == item["DataModelID"]:
@@ -322,10 +328,11 @@ class WorkflowResource(metaclass=SingletonType):
         :return: The bound cluster id
         :rtype: str
         """
-        workflow_env_info = Config.service().list_cluster(params={
-            'Type': "workflow",
-            "ID": self.workspace_id
-        })
+        workflow_env_info = Config.service().list_cluster(
+            params={
+                'Type': "workflow",
+                "ID": self.workspace_id
+            })
         for cluster in workflow_env_info.get('Items'):
             info = cluster["ClusterInfo"]
             if info['Status'] == "Running":
@@ -334,8 +341,14 @@ class WorkflowResource(metaclass=SingletonType):
         raise NotFoundError("cluster", "workflow")
 
     # 这里需要有线下的简易，WDL文件或者压缩包的import逻辑
-    def import_workflow(self, source: str, name: str, language: WORKFLOW_LANGUAGE, tag: str,
-                        main_workflow_path: str, description: str = "", token: str = "") -> str:
+    def import_workflow(self,
+                        source: str,
+                        name: str,
+                        language: WORKFLOW_LANGUAGE,
+                        tag: str,
+                        main_workflow_path: str,
+                        description: str = "",
+                        token: str = "") -> str:
         """Imports a workflow .
 
         *Example*:
@@ -362,7 +375,7 @@ class WorkflowResource(metaclass=SingletonType):
         :return: Workflow ID
         :rtype: str
         """
-        if name: # 流程是否存在
+        if name:  # 流程是否存在
             exist = Config.service().check_workflow({
                 "WorkspaceID": self.workspace_id,
                 "Name": name,
@@ -411,10 +424,10 @@ class WorkflowResource(metaclass=SingletonType):
         res_df = pd.DataFrame.from_records(content['Items'])
         if res_df.empty:
             return res_df
-        res_df['CreateTime'] = pd.to_datetime(res_df['CreateTime'],
-                                              unit='ms', origin=pd.Timestamp('2018-07-01'))
-        res_df['UpdateTime'] = pd.to_datetime(res_df['UpdateTime'],
-                                              unit='ms', origin=pd.Timestamp('2018-07-01'))
+        res_df['CreateTime'] = pd.to_datetime(
+            res_df['CreateTime'], unit='ms', origin=pd.Timestamp('2018-07-01'))
+        res_df['UpdateTime'] = pd.to_datetime(
+            res_df['UpdateTime'], unit='ms', origin=pd.Timestamp('2018-07-01'))
 
         return res_df.drop("Status", axis=1)
 
@@ -442,7 +455,12 @@ class WorkflowResource(metaclass=SingletonType):
 
 
 class Workflow(metaclass=SingletonType):
-    def __init__(self, name: str, workspace_id: str, bucket: str, check: bool = False):
+
+    def __init__(self,
+                 name: str,
+                 workspace_id: str,
+                 bucket: str,
+                 check: bool = False):
         self.name = name
         self.workspace_id = workspace_id
         self.bucket = bucket
@@ -471,10 +489,11 @@ class Workflow(metaclass=SingletonType):
         :return: The bound cluster id
         :rtype: str
         """
-        workflow_env_info = Config.service().list_cluster(params={
-            'Type': "workflow",
-            "ID": self.workspace_id
-        })
+        workflow_env_info = Config.service().list_cluster(
+            params={
+                'Type': "workflow",
+                "ID": self.workspace_id
+            })
         for cluster in workflow_env_info.get('Items'):
             info = cluster["ClusterInfo"]
             if info['Status'] == "Running":
@@ -540,22 +559,32 @@ class Workflow(metaclass=SingletonType):
             raise ParameterError("data_model_name")
 
         if not submission_name_suffix:
-            submission_name_suffix = datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
+            submission_name_suffix = datetime.now().strftime(
+                '%Y-%m-%d-%H-%M-%S')
         submission_id = Config.service().create_submission({
-            "ClusterID": self.get_cluster,
-            'WorkspaceID': self.workspace_id,
-            'WorkflowID': self.id,
-            'Name': workflows.submission_name(self.name, submission_name_suffix),
-            'Description': submission_desc,
-            'DataModelID': data_model_id,
-            'DataModelRowIDs': row_ids,
-            'Inputs': inputs,
+            "ClusterID":
+            self.get_cluster,
+            'WorkspaceID':
+            self.workspace_id,
+            'WorkflowID':
+            self.id,
+            'Name':
+            workflows.submission_name(self.name, submission_name_suffix),
+            'Description':
+            submission_desc,
+            'DataModelID':
+            data_model_id,
+            'DataModelRowIDs':
+            row_ids,
+            'Inputs':
+            inputs,
             'ExposedOptions': {
                 "ReadFromCache": call_caching,
                 # TODO this may change in the future
                 "ExecutionRootDir": f"s3://{self.bucket}"
             },
-            'Outputs': outputs,
+            'Outputs':
+            outputs,
         }).get("ID")
 
         return Submission(self.workspace_id, submission_id).runs

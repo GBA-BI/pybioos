@@ -2,6 +2,7 @@ from tos.models2 import ListedObject
 
 
 class DisplayListedObject:
+
     def __init__(self, o: ListedObject, s3_url: str, https_url: str):
         self.key = o.key
         self.last_modified = o.last_modified

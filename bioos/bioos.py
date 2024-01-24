@@ -20,7 +20,10 @@ def status() -> Config.LoginInfo:
     return Config.login_info()
 
 
-def login(endpoint: str, access_key: str, secret_key: str, region: str = REGION_CN_NORTH1) -> bool:
+def login(endpoint: str,
+          access_key: str,
+          secret_key: str,
+          region: str = REGION_CN_NORTH1) -> bool:
     """Login to the given endpoint using specified account and password.
 
     **If bioos sdk runs inside the miracle private cloud env** such as on a notebook under a
@@ -61,11 +64,13 @@ def list_workspaces() -> DataFrame:
         bioos.list_workspaces()
 
     """
-    return DataFrame.from_records(
-        Config.service().list_workspaces({"PageSize": 0}).get("Items"))
+    return DataFrame.from_records(Config.service().list_workspaces({
+        "PageSize":
+        0
+    }).get("Items"))
 
 
-def workspace(id_: str) -> Workspace:         # 这里是workspace的入口
+def workspace(id_: str) -> Workspace:  # 这里是workspace的入口
     """Returns the workspace for the given name .
 
     :param id_: Workspace id

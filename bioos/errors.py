@@ -73,7 +73,8 @@ class ConflictError(Exception):
         :param msg: conflict reason
         :type msg: str
         """
-        self.message = "parameter '{}' conflicts".format(name) + f": {msg}" if msg else ""
+        self.message = "parameter '{}' conflicts".format(
+            name) + f": {msg}" if msg else ""
         super().__init__(self.message)
 
 

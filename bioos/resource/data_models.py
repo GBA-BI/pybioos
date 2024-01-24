@@ -1,7 +1,7 @@
 from typing import Dict, Iterable, Union
 
 import pandas as pd
-from cachetools import cached, TTLCache
+from cachetools import TTLCache, cached
 from pandas import DataFrame
 
 from bioos.config import Config
@@ -28,7 +28,8 @@ class DataModelResource(metaclass=SingletonType):
         :rtype: DataFrame
         """
         models = Config.service().list_data_models({
-            'WorkspaceID': self.workspace_id,
+            'WorkspaceID':
+            self.workspace_id,
         }).get("Items")
         df = pd.DataFrame.from_records(models)
         return df[df.Type == "normal"].reset_index(drop=True)
@@ -54,10 +55,12 @@ class DataModelResource(metaclass=SingletonType):
             all_normal_models_set = set()
             for _, entity in entities.iterrows():
                 all_normal_models_set.add(entity.Name)
-            duplicate_models_set = all_normal_models_set.intersection(set(sources.keys()))
+            duplicate_models_set = all_normal_models_set.intersection(
+                set(sources.keys()))
             if len(duplicate_models_set) > 0:
-                raise ConflictError("sources", f"{duplicate_models_set} already exists, "
-                                               f"pls use force=True to overwrite")
+                raise ConflictError(
+                    "sources", f"{duplicate_models_set} already exists, "
+                    f"pls use force=True to overwrite")
 
         for name, data in sources.items():
             Config.service().create_data_model({
@@ -67,7 +70,10 @@ class DataModelResource(metaclass=SingletonType):
                 'Rows': data.values.tolist(),
             })
 
-    def read(self, sources: Union[str, Iterable[str], None] = None) -> Dict[str, DataFrame]:
+    def read(
+        self,
+        sources: Union[str, Iterable[str],
+                       None] = None) -> Dict[str, DataFrame]:
         """Reads the data from the remote 'normal' data_models .
 
         return all data_models if `sources` not set
@@ -94,20 +100,22 @@ class DataModelResource(metaclass=SingletonType):
         if not sources:
             models_to_find = all_normal_models.keys()
         else:
-            models_to_find = sources.intersection(set(all_normal_models.keys()))
+            models_to_find = sources.intersection(set(
+                all_normal_models.keys()))
 
         if len(models_to_find) == 0:
             raise NotFoundError("sources", sources)
 
         models_res = {}
         for model in models_to_find:
-            content = Config.service().list_data_model_rows(
-                {
-                    'WorkspaceID': self.workspace_id,
-                    'ID': all_normal_models[model],
-                    'PageSize': 0,
-                }
-            )
+            content = Config.service().list_data_model_rows({
+                'WorkspaceID':
+                self.workspace_id,
+                'ID':
+                all_normal_models[model],
+                'PageSize':
+                0,
+            })
             if content and content["TotalCount"] > 0:
                 res_df = pd.DataFrame.from_records(content['Rows'])
                 res_df.columns = content['Headers']
@@ -133,12 +141,17 @@ class DataModelResource(metaclass=SingletonType):
             raise NotFoundError("target", target)
 
         ids = Config.service().list_data_model_row_ids({
-            'WorkspaceID': self.workspace_id,
-            'ID': entity_row.ID.iloc[0],
+            'WorkspaceID':
+            self.workspace_id,
+            'ID':
+            entity_row.ID.iloc[0],
         })
 
         Config.service().delete_data_model_rows_and_headers({
-            'WorkspaceID': self.workspace_id,
-            'ID': entity_row.ID.iloc[0],
-            'RowIDs': ids["RowIDs"]
+            'WorkspaceID':
+            self.workspace_id,
+            'ID':
+            entity_row.ID.iloc[0],
+            'RowIDs':
+            ids["RowIDs"]
         })

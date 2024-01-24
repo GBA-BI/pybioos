@@ -1,4 +1,5 @@
 import os
+
 from typing_extensions import Literal
 from volcengine.const.Const import REGION_CN_NORTH1
 
@@ -70,8 +71,7 @@ class Config:
 
     @classmethod
     def _same_endpoint(cls):
-        return (cls._service.service_info.scheme +
-                "://" +
+        return (cls._service.service_info.scheme + "://" +
                 cls._service.service_info.host) == cls._endpoint
 
     @classmethod
@@ -140,6 +140,8 @@ class Config:
         if not cls._secret_key:
             raise ConfigurationError('SECRET_KEY')
 
-        cls._service = BioOsService(endpoint=cls._endpoint, region=cls._region) #cls._service 属性保持登陆状态，并做为下游的调用入口
+        cls._service = BioOsService(
+            endpoint=cls._endpoint,
+            region=cls._region)  #cls._service 属性保持登陆状态，并做为下游的调用入口
         cls._service.set_ak(cls._access_key)
         cls._service.set_sk(cls._secret_key)

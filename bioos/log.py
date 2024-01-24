@@ -33,7 +33,8 @@ class Logger:
                 raise ValueError("Unknown level: %r" % level)
             cls._CUR_LEVEL = cls._nameToLevel[level]
         else:
-            raise TypeError("Level not an integer or a valid string: %r" % level)
+            raise TypeError("Level not an integer or a valid string: %r" %
+                            level)
         return cls._CUR_LEVEL
 
     @classmethod
@@ -55,6 +56,7 @@ class Logger:
 
 # TODO will be used for cli in the future
 class ClickLogger(Logger):
+
     @classmethod
     def debug(cls, content):
         if cls._check_level(cls._DEBUG_LEVEL):
@@ -77,6 +79,7 @@ class ClickLogger(Logger):
 
 
 class PyLogger(Logger):
+
     class CustomFormatter(logging.Formatter):
 
         reset = "\x1b[0m"

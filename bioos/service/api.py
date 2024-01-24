@@ -44,9 +44,7 @@ def upload_entity_table(csvfile, table_name=None):
 
 def list_entity_tables():
     __set_env()
-    params = {
-        'WorkspaceID': conf.workspace_id()
-    }
+    params = {'WorkspaceID': conf.workspace_id()}
     result = conf.service().list_data_models(params)
     entities = []
     for table in result['Items']:
@@ -81,10 +79,7 @@ def delete_entity_table(table_name):
     table = get_entity_table(table_name, page_size=1)
     if not table:
         raise NotFoundError('Table', table_name)
-    params = {
-        'WorkspaceID': conf.workspace_id(),
-        'ID': table['ID']
-    }
+    params = {'WorkspaceID': conf.workspace_id(), 'ID': table['ID']}
     ids = conf.service().list_data_model_row_ids(params)
     params = {
         'WorkspaceID': conf.workspace_id(),
@@ -146,7 +141,9 @@ def get_workflow(workflow_name):
         return None
     params = {
         'WorkspaceID': conf.workspace_id(),
-        'Filter': {'IDs': [lis[0].get('ID')]}
+        'Filter': {
+            'IDs': [lis[0].get('ID')]
+        }
     }
     workflows = conf.service().list_workflows(params).get('Items')
     if len(workflows) != 1:
@@ -159,9 +156,15 @@ def get_workflow(workflow_name):
     return res
 
 
-def add_submission(workflow_name, table_name, row_ids, cluster_id, inputs={}, outputs={},
+def add_submission(workflow_name,
+                   table_name,
+                   row_ids,
+                   cluster_id,
+                   inputs={},
+                   outputs={},
                    submission_name_suffix=None,
-                   submission_desc=None, call_caching=True):
+                   submission_desc=None,
+                   call_caching=True):
     if not row_ids or not isinstance(row_ids, list):
         raise ParameterError('row_ids')
     if not inputs and not isinstance(inputs, dict):
@@ -186,14 +189,20 @@ def add_submission(workflow_name, table_name, row_ids, cluster_id, inputs={}, ou
         'DataModelID': table['ID'],
         'DataModelRowIDs': row_ids,
         'Inputs': json.dumps(inputs),
-        'ExposedOptions': {"ReadFromCache": call_caching},
+        'ExposedOptions': {
+            "ReadFromCache": call_caching
+        },
         'Outputs': json.dumps(outputs)
     }
     conf.service().create_submission(params)
 
 
-def list_submissions(workflow_name=None, search_keyword=None, status=None, cluster_id=None,
-                     page_number=1, page_size=10):
+def list_submissions(workflow_name=None,
+                     search_keyword=None,
+                     status=None,
+                     cluster_id=None,
+                     page_number=1,
+                     page_size=10):
     __set_env()
     params = {
         'WorkspaceID': conf.workspace_id(),
@@ -235,7 +244,8 @@ def get_submission(submission_name):
             data_entity_row_ids.add(run.get("DataEntityRowID"))
     # get data model name by call list data models
     models = conf.service().list_data_models({
-        'WorkspaceID': submission.get("WorkflowID"),
+        'WorkspaceID':
+        submission.get("WorkflowID"),
     }).get("Items")
     data_model = ""
     for model in models:
@@ -255,20 +265,14 @@ def delete_submission(submission_name):
     submission = get_submission(submission_name)
     if not submission:
         raise NotFoundError('Submission', submission_name)
-    params = {
-        'WorkspaceID': conf.workspace_id(),
-        'ID': submission['ID']
-    }
+    params = {'WorkspaceID': conf.workspace_id(), 'ID': submission['ID']}
     conf.service().delete_submission(params)
 
 
 def list_cluster(cluster_type):
     if cluster_type not in ("notebook", "workflow"):
         raise ParameterError("cluster_type")
-    params = {
-        'Type': cluster_type,
-        'ID': conf.workspace_id()
-    }
+    params = {'Type': cluster_type, 'ID': conf.workspace_id()}
     clusters = conf.service().list_cluster(params).get('Items')
     res = []
     for cluster in clusters:

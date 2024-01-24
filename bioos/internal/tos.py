@@ -6,7 +6,7 @@ from typing import List
 import tos
 from tos import DataTransferType, HttpMethodType
 from tos.exceptions import TosClientError
-from tos.models2 import ObjectTobeDeleted, ListedObject, DeleteError
+from tos.models2 import DeleteError, ListedObject, ObjectTobeDeleted
 
 from bioos.config import Config
 from bioos.errors import ParameterError
@@ -34,15 +34,17 @@ def tos_percentage(consumed_bytes, total_bytes, rw_once_bytes,
     notify_num = int(parts_num / 10)
     if total_bytes and notify_num and cur_part % notify_num == 0:
         rate = int(100 * float(consumed_bytes) / float(total_bytes))
-        Config.Logger.info("rate:{}, consumed_bytes:{},total_bytes:{}, rw_once_bytes:{}"
-                           .format(rate,
-                                   consumed_bytes,
-                                   total_bytes,
-                                   rw_once_bytes))
+        Config.Logger.info(
+            "rate:{}, consumed_bytes:{},total_bytes:{}, rw_once_bytes:{}".
+            format(rate, consumed_bytes, total_bytes, rw_once_bytes))
 
 
 class TOSHandler:
-    def __init__(self, client: tos.clientv2, bucket: str, logger: Logger = Config.Logger):
+
+    def __init__(self,
+                 client: tos.clientv2,
+                 bucket: str,
+                 logger: Logger = Config.Logger):
         # client should be with federation_credential
         self._client = client
         self._bucket = bucket
@@ -61,7 +63,8 @@ class TOSHandler:
 
     def presign_download_url(self, file_path: str, duration: int) -> str:
         return self._client.pre_signed_url(HttpMethodType.Http_Method_Get,
-                                           self._bucket, file_path, duration).signed_url
+                                           self._bucket, file_path,
+                                           duration).signed_url
 
     def list_objects(self, target_path: str, num: int) -> List[ListedObject]:
         object_list = []
@@ -83,10 +86,11 @@ class TOSHandler:
                             max_keys=remain).contents
                         break
                     else:
-                        resp = self._client.list_objects(bucket=self._bucket,
-                                                         prefix=target_path,
-                                                         marker=cur_marker,
-                                                         max_keys=LIST_OBJECT_MAX_KEYS)
+                        resp = self._client.list_objects(
+                            bucket=self._bucket,
+                            prefix=target_path,
+                            marker=cur_marker,
+                            max_keys=LIST_OBJECT_MAX_KEYS)
                         object_list += resp.contents
                         if not resp.is_truncated:
                             break
@@ -106,35 +110,37 @@ class TOSHandler:
                 cur_marker = resp.next_marker
         return object_list
 
-    def upload_objects(self, files_to_upload: List[str], target_path: str, flatten: bool,
-                       ignore: str = "", include: str = "", ) -> List[str]:
+    def upload_objects(
+        self,
+        files_to_upload: List[str],
+        target_path: str,
+        flatten: bool,
+        ignore: str = "",
+        include: str = "",
+    ) -> List[str]:
 
         def _upload_fail(error_list_: List[str], file_path_: str):
             error_list_.append(file_path_)
 
         def _upload_small_file(file_path_, tos_target_path_):
-            self._client.put_object_from_file(bucket=self._bucket,
-                                              key=tos_target_path_,
-                                              file_path=file_path_,
-                                              # don't show progress while uploading small file
-                                              # data_transfer_listener=tos_percentage
-                                              )
-
-        def _upload_big_file(file_path_, tos_target_path_, fsize_):
-            part_size = max(int(fsize_ / MAX_ALLOWED_PARTS) + 1,
-                            MIN_PART_SIZE)
-            self._client.upload_file(
+            self._client.put_object_from_file(
                 bucket=self._bucket,
                 key=tos_target_path_,
                 file_path=file_path_,
-                part_size=part_size,
-                task_num=DEFAULT_THREAD,
-                data_transfer_listener=tos_percentage
+                # don't show progress while uploading small file
+                # data_transfer_listener=tos_percentage
             )
 
-        files_to_upload = self.files_filter(files_to_upload,
-                                            include,
-                                            ignore)
+        def _upload_big_file(file_path_, tos_target_path_, fsize_):
+            part_size = max(int(fsize_ / MAX_ALLOWED_PARTS) + 1, MIN_PART_SIZE)
+            self._client.upload_file(bucket=self._bucket,
+                                     key=tos_target_path_,
+                                     file_path=file_path_,
+                                     part_size=part_size,
+                                     task_num=DEFAULT_THREAD,
+                                     data_transfer_listener=tos_percentage)
+
+        files_to_upload = self.files_filter(files_to_upload, include, ignore)
         if len(files_to_upload) == 0:
             self._info_logging("no files to upload")
             return
@@ -155,13 +161,16 @@ class TOSHandler:
             if os.path.isabs(to_upload_path):
                 to_upload_path = to_upload_path.lstrip("/")
 
-            tos_target_path = os.path.normpath(os.path.join(target_path, to_upload_path))
+            tos_target_path = os.path.normpath(
+                os.path.join(target_path, to_upload_path))
 
-            self._debug_logging(f"[{file_path}] begins to upload to [{tos_target_path}]")
+            self._debug_logging(
+                f"[{file_path}] begins to upload to [{tos_target_path}]")
 
             try:
                 if fsize == 0:
-                    self._error_logging(f"can not upload empty file {tos_target_path}")
+                    self._error_logging(
+                        f"can not upload empty file {tos_target_path}")
                     _upload_fail(error_list, file_path)
                     continue
                 if fsize <= SIMPLE_UPLOAD_LIMITATION:
@@ -179,15 +188,20 @@ class TOSHandler:
             self._debug_logging(f"{file_path} uploads succeed")
 
         if error_list:
-            self._error_logging(f"{len(error_list)} uploaded failed, please upload them again: "
-                                f"\n{error_list}")
+            self._error_logging(
+                f"{len(error_list)} uploaded failed, please upload them again: "
+                f"\n{error_list}")
 
         return error_list
 
-    def download_objects(self, files_to_download: List[str], local_path: str, flatten: bool,
-                         ignore: str = "", include: str = "", force: bool = True) -> List[str]:
-        files_to_download = self.files_filter(files_to_download,
-                                              include,
+    def download_objects(self,
+                         files_to_download: List[str],
+                         local_path: str,
+                         flatten: bool,
+                         ignore: str = "",
+                         include: str = "",
+                         force: bool = True) -> List[str]:
+        files_to_download = self.files_filter(files_to_download, include,
                                               ignore)
 
         files_failed = []
@@ -202,28 +216,29 @@ class TOSHandler:
                     "can't download the file with the name formats 'xxx/'")
                 continue
 
-            local_target_path = os.path.basename(f) if flatten else os.path.normpath(f)
+            local_target_path = os.path.basename(
+                f) if flatten else os.path.normpath(f)
 
             if not force:
                 if os.path.isfile(local_target_path):
-                    self._debug_logging(f"skip downloading {local_target_path}")
+                    self._debug_logging(
+                        f"skip downloading {local_target_path}")
                     continue
 
             try:
-                resp = self._client.head_object(
-                    bucket=self._bucket,
-                    key=f)
+                resp = self._client.head_object(bucket=self._bucket, key=f)
                 fsize_ = resp.content_length
-                part_size = max(int(fsize_ / MAX_ALLOWED_PARTS) + 1,
-                                MIN_PART_SIZE)
+                part_size = max(
+                    int(fsize_ / MAX_ALLOWED_PARTS) + 1, MIN_PART_SIZE)
 
                 actual_file_path = os.path.join(local_path, local_target_path)
-                self._client.download_file(bucket=self._bucket,
-                                           key=f,
-                                           file_path=actual_file_path,
-                                           part_size=part_size,
-                                           task_num=DEFAULT_THREAD,
-                                           data_transfer_listener=tos_percentage)
+                self._client.download_file(
+                    bucket=self._bucket,
+                    key=f,
+                    file_path=actual_file_path,
+                    part_size=part_size,
+                    task_num=DEFAULT_THREAD,
+                    data_transfer_listener=tos_percentage)
             except tos.exceptions.TosServerError as e:
                 if e.status_code == 404:
                     self._warn_logging(f"'{f}' not found")
@@ -231,7 +246,9 @@ class TOSHandler:
             except Exception as err_:
                 raise err_
                 if self._is_crc_check_error(err_):
-                    self._warn_logging(f"CRC check {actual_file_path} failed, file will be removed")
+                    self._warn_logging(
+                        f"CRC check {actual_file_path} failed, file will be removed"
+                    )
                     os.remove(actual_file_path)
                 self._error_logging(f"download {f} failed: {err_}")
                 files_failed.append(f)
@@ -242,9 +259,7 @@ class TOSHandler:
 
     def delete_objects(self, files_to_delete: List[str], ignore: str = "", include: str = "") \
             -> List[DeleteError]:
-        files_to_delete = self.files_filter(files_to_delete,
-                                            include,
-                                            ignore)
+        files_to_delete = self.files_filter(files_to_delete, include, ignore)
 
         if len(files_to_delete) == 0:
             self._info_logging("no files to delete")
@@ -257,18 +272,23 @@ class TOSHandler:
             # default quiet mode will only return error_list
             resp = self._client.delete_multi_objects(
                 bucket=self._bucket,
-                objects=[ObjectTobeDeleted(f) for f in files_to_delete[cur: cur_end]]
-            )
+                objects=[
+                    ObjectTobeDeleted(f) for f in files_to_delete[cur:cur_end]
+                ])
             cur = cur_end
             cur_end = min((cur + ONE_BATCH_MAX_DELETE), len(files_to_delete))
             if len(resp.error) != 0:
                 error_list += resp.error_list
         if len(error_list) > 0:
             self._info_logging(
-                f"{len(error_list)} files left undeleted: {[err.key for err in error_list]}.")
+                f"{len(error_list)} files left undeleted: {[err.key for err in error_list]}."
+            )
         return error_list
 
-    def files_filter(self, files: List[str], include: str = "", ignore: str = "") -> List[str]:
+    def files_filter(self,
+                     files: List[str],
+                     include: str = "",
+                     ignore: str = "") -> List[str]:
         file_lst = []
         for f in files:
             if f.endswith("/"):

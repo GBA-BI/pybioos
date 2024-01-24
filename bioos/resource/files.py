@@ -12,7 +12,7 @@ from bioos.config import Config
 from bioos.errors import ParameterError
 from bioos.internal.tos import TOSHandler
 from bioos.models.models import DisplayListedObject
-from bioos.utils.common_tools import SingletonType, s3_endpoint_mapping, dict_str
+from bioos.utils.common_tools import SingletonType, dict_str, s3_endpoint_mapping
 
 
 class FileResource(metaclass=SingletonType):
@@ -27,15 +27,16 @@ class FileResource(metaclass=SingletonType):
         })
         self.endpoint = s3_endpoint_mapping(res["Endpoint"])
         self.region = res["Region"]
-        self.tos_handler = TOSHandler(tos.TosClientV2(
-            ak=None,
-            sk=None,
-            region=None,
-            endpoint=self.endpoint,
-            auth=tos.FederationAuth(FederationCredentials(self._refresh_federation_credentials),
-                                    self.region),
-            max_retry_count=self.TOS_RETRY_TIMES
-        ), self.bucket)
+        self.tos_handler = TOSHandler(
+            tos.TosClientV2(ak=None,
+                            sk=None,
+                            region=None,
+                            endpoint=self.endpoint,
+                            auth=tos.FederationAuth(
+                                FederationCredentials(
+                                    self._refresh_federation_credentials),
+                                self.region),
+                            max_retry_count=self.TOS_RETRY_TIMES), self.bucket)
 
     def __repr__(self) -> str:
         info_dict = dict_str({
@@ -56,10 +57,10 @@ class FileResource(metaclass=SingletonType):
         tos_sk = res["SecretKey"]
         sts_token = res["SessionToken"]
 
-        return FederationToken(tos_ak, tos_sk, sts_token,
-                               (datetime.datetime.fromisoformat(
-                                   res["ExpiredTime"]) - datetime.timedelta(
-                                   minutes=5)).timestamp())
+        return FederationToken(
+            tos_ak, tos_sk, sts_token,
+            (datetime.datetime.fromisoformat(res["ExpiredTime"]) -
+             datetime.timedelta(minutes=5)).timestamp())
 
     @property
     @cached(cache=TTLCache(maxsize=10, ttl=1))
@@ -92,7 +93,8 @@ class FileResource(metaclass=SingletonType):
         return f"s3://{self.bucket}/{file_path}"
 
     def _build_https_url(self, file_path) -> str:
-        return self.tos_handler.presign_download_url(file_path, self.DEFAULT_PRE_SIGNED_TIME)
+        return self.tos_handler.presign_download_url(
+            file_path, self.DEFAULT_PRE_SIGNED_TIME)
 
     def s3_urls(self, sources: Union[str, Iterable[str]]) -> List[str]:
         """Returns the S3 URLs for all the specified files .
@@ -149,13 +151,15 @@ class FileResource(metaclass=SingletonType):
         :rtype: DataFrame
         """
         files = self.tos_handler.list_objects("", 0)
-        return pd.DataFrame.from_records([DisplayListedObject(f,
-                                                              self._build_s3_url(f.key),
-                                                              self._build_https_url(f.key)).__dict__
-                                          for f in files])
+        return pd.DataFrame.from_records([
+            DisplayListedObject(f, self._build_s3_url(f.key),
+                                self._build_https_url(f.key)).__dict__
+            for f in files
+        ])
 
     # TODO support s3 url input in the future
-    def download(self, sources: Union[str, Iterable[str]], target: str, flatten: bool) -> bool:
+    def download(self, sources: Union[str, Iterable[str]], target: str,
+                 flatten: bool) -> bool:
         """Downloads all the specified file from internal tos bucket bound to workspace to
         local path.
 
@@ -178,9 +182,11 @@ class FileResource(metaclass=SingletonType):
         if isinstance(sources, str):
             sources = [sources]
 
-        return len(self.tos_handler.download_objects(sources, target, flatten)) == 0
+        return len(self.tos_handler.download_objects(sources, target,
+                                                     flatten)) == 0
 
-    def upload(self, sources: Union[str, Iterable[str]], target: str, flatten: bool) -> bool:
+    def upload(self, sources: Union[str, Iterable[str]], target: str,
+               flatten: bool) -> bool:
         """Uploads a local file or a batch of local files to internal tos bucket bound to workspace.
 
         *Example*:
@@ -201,7 +207,8 @@ class FileResource(metaclass=SingletonType):
         if isinstance(sources, str):
             sources = [sources]
 
-        return len(self.tos_handler.upload_objects(sources, target, flatten)) == 0
+        return len(self.tos_handler.upload_objects(sources, target,
+                                                   flatten)) == 0
 
     def delete(self, sources: Union[str, Iterable[str]]) -> bool:
         """Deletes the given file from the tos bucket bound to workspace .
