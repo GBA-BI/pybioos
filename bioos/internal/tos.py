@@ -25,8 +25,11 @@ REFRESH_TOKEN_TIME_BEFORE_EXPIRE = 20 * 60
 CRC_CHECK_ERROR_PREFIX = "Check CRC failed"
 
 
-def tos_percentage(consumed_bytes, total_bytes, rw_once_bytes,
-                   type_: DataTransferType):
+def tos_percentage(
+        consumed_bytes,
+        total_bytes,
+        rw_once_bytes,  # 类似进度条的报告
+        type_: DataTransferType):
     if rw_once_bytes == 0:
         return
     parts_num = math.ceil(float(total_bytes) / float(rw_once_bytes))
@@ -41,10 +44,11 @@ def tos_percentage(consumed_bytes, total_bytes, rw_once_bytes,
 
 class TOSHandler:
 
-    def __init__(self,
-                 client: tos.clientv2,
-                 bucket: str,
-                 logger: Logger = Config.Logger):
+    def __init__(
+            self,
+            client: tos.clientv2.TosClientV2,  # fixed
+            bucket: str,
+            logger: Logger = Config.Logger):
         # client should be with federation_credential
         self._client = client
         self._bucket = bucket
@@ -143,7 +147,7 @@ class TOSHandler:
         files_to_upload = self.files_filter(files_to_upload, include, ignore)
         if len(files_to_upload) == 0:
             self._info_logging("no files to upload")
-            return
+            return []
 
         error_list = []
         for file_path in files_to_upload:
@@ -164,7 +168,7 @@ class TOSHandler:
             tos_target_path = os.path.normpath(
                 os.path.join(target_path, to_upload_path))
 
-            self._debug_logging(
+            self._info_logging(
                 f"[{file_path}] begins to upload to [{tos_target_path}]")
 
             try:
@@ -185,7 +189,7 @@ class TOSHandler:
                 _upload_fail(error_list, file_path)
                 continue
 
-            self._debug_logging(f"{file_path} uploads succeed")
+            self._info_logging(f"{file_path} uploads succeed")
 
         if error_list:
             self._error_logging(
@@ -232,6 +236,8 @@ class TOSHandler:
                     int(fsize_ / MAX_ALLOWED_PARTS) + 1, MIN_PART_SIZE)
 
                 actual_file_path = os.path.join(local_path, local_target_path)
+                self._info_logging(
+                    f"[{f}] begins to download to [{actual_file_path}]")
                 self._client.download_file(
                     bucket=self._bucket,
                     key=f,
@@ -239,6 +245,7 @@ class TOSHandler:
                     part_size=part_size,
                     task_num=DEFAULT_THREAD,
                     data_transfer_listener=tos_percentage)
+                self._info_logging(f"[{f}] download successfully.")
             except tos.exceptions.TosServerError as e:
                 if e.status_code == 404:
                     self._warn_logging(f"'{f}' not found")

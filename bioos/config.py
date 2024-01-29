@@ -16,7 +16,7 @@ class Config:
     _secret_key: str = os.environ.get('VOLC_SECRETKEY')
     _endpoint: str = os.environ.get('BIOOS_ENDPOINT')
     _region: str = REGION_CN_NORTH1
-    Logger = PyLogger
+    Logger = PyLogger()  # 这里是把类赋给了Logger变量
 
     class LoginInfo:
         """[Only Read]Record the current login information .
@@ -58,7 +58,7 @@ class Config:
             except ConfigurationError:
                 return "Not logged in"
             except Exception as e:
-                Config.Logger.error(e)
+                Config.Logger.error(e)  # 这里触发Logger的类函数
                 return "Not logged in"
             return "Already logged in"
 

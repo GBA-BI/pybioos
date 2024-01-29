@@ -163,15 +163,14 @@ class Bioos_workflow:
             for run in self.runs:
                 if run.submission in file:
                     print(file)
-                    if "%" in file:
-                        continue
+
                     files.append(file)
 
         if download:
             try:
                 self.ws.files.download(files, ".", flatten=False)
-            except:  # noqa: E722
-                print('Some file can not download.')
+            except Exception as e:
+                print(f'Some file can not download. \n {e}')
 
             self.logger.info("Download finish.")
 

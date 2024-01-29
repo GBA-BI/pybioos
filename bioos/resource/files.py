@@ -24,19 +24,20 @@ class FileResource(metaclass=SingletonType):
         self.bucket = bucket
         res = Config.service().get_tos_access({
             'WorkspaceID': self.workspace_id,
-        })
+        })  # 这里触发的是后端的返回行为，返回值无定义python类型
         self.endpoint = s3_endpoint_mapping(res["Endpoint"])
         self.region = res["Region"]
-        self.tos_handler = TOSHandler(
-            tos.TosClientV2(ak=None,
-                            sk=None,
-                            region=None,
-                            endpoint=self.endpoint,
-                            auth=tos.FederationAuth(
-                                FederationCredentials(
-                                    self._refresh_federation_credentials),
-                                self.region),
-                            max_retry_count=self.TOS_RETRY_TIMES), self.bucket)
+        self.tos_handler = TOSHandler(  #需要注意
+            tos.TosClientV2(  # 2.6.6中tos下还要有一层
+                ak=None,
+                sk=None,
+                region=None,
+                endpoint=self.endpoint,
+                auth=tos.FederationAuth(  # 这里是使用构建的FeterationTokon为进行auth
+                    FederationCredentials(
+                        self._refresh_federation_credentials), self.region),
+                max_retry_count=self.TOS_RETRY_TIMES),
+            self.bucket)
 
     def __repr__(self) -> str:
         info_dict = dict_str({
@@ -86,13 +87,13 @@ class FileResource(metaclass=SingletonType):
         return len(self._list_with_cache())
 
     @cached(cache=TTLCache(maxsize=10, ttl=1))
-    def _list_with_cache(self) -> List[ListedObject]:
+    def _list_with_cache(self) -> List[ListedObject]:  # 需要一个list指定路径的方法
         return self.tos_handler.list_objects("", 0)
 
-    def _build_s3_url(self, file_path) -> str:
+    def _build_s3_url(self, file_path) -> str:  #内部使用的相对路径，构建完整的s3
         return f"s3://{self.bucket}/{file_path}"
 
-    def _build_https_url(self, file_path) -> str:
+    def _build_https_url(self, file_path) -> str:  #生成有权限的http
         return self.tos_handler.presign_download_url(
             file_path, self.DEFAULT_PRE_SIGNED_TIME)
 
@@ -110,7 +111,7 @@ class FileResource(metaclass=SingletonType):
         :return: S3 URLS of the file or a batch of file
         :rtype: List[str]
         """
-        if isinstance(sources, str):
+        if isinstance(sources, str):  #为兼容Union必须的操作
             sources = [sources]
 
         if isinstance(sources, Iterable):
@@ -138,7 +139,7 @@ class FileResource(metaclass=SingletonType):
             return [self._build_https_url(elem) for elem in sources]
         raise ParameterError("sources")
 
-    def list(self) -> DataFrame:
+    def list(self, prefix: str = '') -> DataFrame:  # 这里需要升级，支持list指定的路径，
         """Lists all files' information .
 
         *Example*:
@@ -150,7 +151,7 @@ class FileResource(metaclass=SingletonType):
         :return: files' information
         :rtype: DataFrame
         """
-        files = self.tos_handler.list_objects("", 0)
+        files = self.tos_handler.list_objects(prefix, 0)
         return pd.DataFrame.from_records([
             DisplayListedObject(f, self._build_s3_url(f.key),
                                 self._build_https_url(f.key)).__dict__
@@ -182,11 +183,15 @@ class FileResource(metaclass=SingletonType):
         if isinstance(sources, str):
             sources = [sources]
 
-        return len(self.tos_handler.download_objects(sources, target,
-                                                     flatten)) == 0
+        return len(
+            self.tos_handler.download_objects(  # 增加异常控制
+                sources, target, flatten)) == 0
 
-    def upload(self, sources: Union[str, Iterable[str]], target: str,
-               flatten: bool) -> bool:
+    def upload(
+            self,
+            sources: Union[str, Iterable[str]],
+            target: str,  #这里需要增加已上传的校验，如已存在同名文件，有skip的选项
+            flatten: bool) -> bool:
         """Uploads a local file or a batch of local files to internal tos bucket bound to workspace.
 
         *Example*:
