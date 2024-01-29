@@ -63,7 +63,7 @@ class Bioos_workflow:
         self.wf = self.ws.workflow(name=workflow_name)
 
     # 需要有推定上传目的地址的机制，由WES endpoint的配置来指定
-    def input_provision(self, workflow_input_json: dict):
+    def input_provision(self, workflow_input_json: dict, force: bool = False):
         # need to support different source and target
         # 输入的是WDL的标准json，有两种形式，单例的{}和多例的[{}]，为简单表述，这里以单例形式处理
 
@@ -72,10 +72,18 @@ class Bioos_workflow:
 
         # upload files
         update_dict = {}
+        df = self.ws.files.list('input_provision')
+        uploaded_files = [] if df.empty else df.key.to_list()
+
+        # 这里可以改为数组上传
         for key, value in putative_files.items():
             target = f"input_provision/{os.path.basename(value)}"
-            # 这里如果多行记录，即多个样本的run中有相同的文件，可能会触发多次上传。可能可以通过判断文件是否存在来判断
-            # 需要对file的存在性进行检验
+
+            # skip existed file upload
+            if not force and target in uploaded_files:
+                self.logger.info(f"Skip tos existed file {value}")
+                continue
+
             # 这里的target是prefix
             self.logger.info(f"Start upload {value}.")
             self.ws.files.upload(value,
@@ -93,13 +101,12 @@ class Bioos_workflow:
     def output_provision(self):
         pass
 
-    def preprocess(
-        self,
-        input_json_file: str,
-        data_model_name: str = "dm",
-        submission_desc: str = "Submit by pybioos",
-        call_caching: bool = True,
-    ):
+    def preprocess(self,
+                   input_json_file: str,
+                   data_model_name: str = "dm",
+                   submission_desc: str = "Submit by pybioos",
+                   call_caching: bool = True,
+                   force_reupload: bool = False):
         input_json = json.load(open(input_json_file))
         self.logger.info("Load json input successfully.")
 
@@ -114,7 +121,8 @@ class Bioos_workflow:
         # 处理provision，更新inputs_list
         inputs_list_update = []
         for input_dict in inputs_list:
-            input_dict_update = self.input_provision(input_dict)
+            input_dict_update = self.input_provision(input_dict,
+                                                     force_reupload)
             inputs_list_update.append(input_dict_update)
 
         # 生成datamodel并上传
@@ -233,6 +241,9 @@ def bioos_workflow():
                         type=str,
                         help="Description for the submission run.",
                         default="Submit by pybioos.")
+    parser.add_argument('--force_reupload',
+                        action='store_true',
+                        help="Force reupolad tos existed files.")
 
     parser.add_argument(
         "--monitor",
@@ -259,7 +270,8 @@ def bioos_workflow():
     bw.preprocess(input_json_file=parsed_args.input_json,
                   data_model_name=parsed_args.data_model_name,
                   submission_desc=parsed_args.submission_desc,
-                  call_caching=parsed_args.call_caching)
+                  call_caching=parsed_args.call_caching,
+                  force_reupload=parsed_args.force_reupload)
     bw.submit_workflow_bioosapi()
 
     # moniter

@@ -235,6 +235,7 @@ class TOSHandler:
                 part_size = max(
                     int(fsize_ / MAX_ALLOWED_PARTS) + 1, MIN_PART_SIZE)
 
+                # target文件名确定
                 actual_file_path = os.path.join(local_path, local_target_path)
                 self._info_logging(
                     f"[{f}] begins to download to [{actual_file_path}]")
