@@ -18,7 +18,7 @@ setup(
         "tabulate>=0.8.10",
         "click>=8.0.0",
         "pandas>=1.3.0",
-        "tos==2.3.4",
+        "tos==2.5.6",
         "cachetools>=5.2.0",
         "typing-extensions>=4.4.0",
         "apscheduler>=3.10.4",
