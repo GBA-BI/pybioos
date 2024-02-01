@@ -3,6 +3,10 @@
 Python SDK for Bio-OS.
 
 # Installation
+From PYPI.
+```
+$ pip install pybioos
+```
 
 From source code.
 ```
@@ -19,7 +23,8 @@ Or use as CLI command:
 ```
 $ bw -h
 usage: bw [-h] [--endpoint ENDPOINT] [--ak AK] [--sk SK] [--workspace_name WORKSPACE_NAME] [--workflow_name WORKFLOW_NAME] [--input_json INPUT_JSON]
-          [--data_model_name DATA_MODEL_NAME] [--call_caching] [--submission_desc SUBMISSION_DESC] [--monitor] [--monitor_interval MONITOR_INTERVAL] [--download_results]
+          [--data_model_name DATA_MODEL_NAME] [--call_caching] [--submission_desc SUBMISSION_DESC] [--force_reupload] [--monitor]
+          [--monitor_interval MONITOR_INTERVAL] [--download_results]
 
 Bio-OS instance platform workflow submitter program.
 
@@ -39,6 +44,7 @@ options:
   --call_caching        Call_caching for the submission run.
   --submission_desc SUBMISSION_DESC
                         Description for the submission run.
+  --force_reupload      Force reupolad tos existed files.
   --monitor             Moniter the status of submission run until finishment.
   --monitor_interval MONITOR_INTERVAL
                         Time interval for query the status for the submission runs.
