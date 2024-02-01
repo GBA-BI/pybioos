@@ -6,7 +6,7 @@ setup(
     name="pybioos",
     version=__version__,
     keywords=["pip", "bioos"],
-    description="BioOs SDK for Python",
+    description="BioOS SDK for Python",
     license="MIT Licence",
     url="https://github.com/GBA-BI/pybioos",
     author="Jilong Liu",
