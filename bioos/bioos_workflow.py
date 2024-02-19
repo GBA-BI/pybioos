@@ -82,14 +82,13 @@ class Bioos_workflow:
             # skip existed file upload
             if not force and target in uploaded_files:
                 self.logger.info(f"Skip tos existed file {value}")
-                continue
-
-            # 这里的target是prefix
-            self.logger.info(f"Start upload {value}.")
-            self.ws.files.upload(value,
-                                 target="input_provision/",
-                                 flatten=True)
-            self.logger.info(f"Finish upload {value}.")
+            else:
+                # 这里的target是prefix
+                self.logger.info(f"Start upload {value}.")
+                self.ws.files.upload(value,
+                                     target="input_provision/",
+                                     flatten=True)
+                self.logger.info(f"Finish upload {value}.")
 
             s3_location = self.ws.files.s3_urls(target)[0]
             update_dict[key] = s3_location
