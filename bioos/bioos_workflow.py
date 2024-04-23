@@ -291,4 +291,9 @@ def bioos_workflow():
             bw.monitor_workflow()
 
         time.sleep(60)
+        bw.logger.info("Submission finished. Print final status for runs.")
+        print(bw.runs)
+
+        bw.logger.info("Start to postprocess.")
         bw.postprocess(download=parsed_args.download_results)
+        bw.logger.info("Postprocess finished.")
