@@ -292,10 +292,11 @@ class Submission(metaclass=SingletonType):  # 与run class行为相同
             'WorkspaceID':
             self.workspace_id,
         }).get("Items")
-        for model in models:
-            if model["ID"] == item["DataModelID"]:
-                self.data_model = model.get("Name")
-                break
+        if "DataModelID" in item.keys():
+            for model in models:
+                if model["ID"] == item["DataModelID"]:
+                    self.data_model = model.get("Name")
+                    break
 
         self.call_cache = item.get("ExposedOptions").get("ReadFromCache")
         self.outputs = item.get("Outputs")

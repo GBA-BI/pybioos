@@ -2,12 +2,13 @@ import argparse
 import json
 import logging
 import os
+import re
 import time
 
 import pandas as pd
 
 from bioos import bioos
-from bioos.errors import NotFoundError
+from bioos.errors import NotFoundError, ParameterError
 
 
 def recognize_files_from_input_json(workflow_input_json: dict) -> dict:
@@ -159,6 +160,100 @@ class Bioos_workflow:
 
         return self.params_submit
 
+    def preprocess2(self,
+                    input_json_file: str,
+                    data_model_name: str = "dm",
+                    submission_desc: str = "Submit by pybioos",
+                    call_caching: bool = True,
+                    force_reupload: bool = False):
+        if not os.path.isfile(input_json_file):
+            raise ParameterError('Input_json_file is not found.')
+
+        input_json = json.load(open(input_json_file))
+        self.logger.info("Load json input successfully.")
+
+        # putative files
+        input_json_str = json.dumps(input_json)
+
+        # capture strings containing "/" the test if the file exists
+        putative_files = [
+            s.strip('"\'') for s in re.findall(
+                r'''"[-_\w./:]+?/[-_\w./:]+?"''', input_json_str)
+            if os.path.isfile(s.strip('"\''))
+        ]
+
+        putative_files = set(putative_files)
+        file_str = ''
+        for putative_file in putative_files:
+            file_str = file_str + '\t' + putative_file + '\n'
+
+        self.logger.info(
+            f"Putative files need to upload includes:\n{file_str}")
+
+        # provision upload and file path replace
+        df = self.ws.files.list('input_provision')
+        uploaded_files = [] if df.empty else df.key.to_list()
+        for putative_file in putative_files:
+            target = f"input_provision/{os.path.basename(putative_file)}"
+
+            if not force_reupload and target in uploaded_files:
+                self.logger.info(
+                    f"Skip target site already existed file {putative_file}.")
+            else:
+                self.logger.info(f"Start upload {putative_file}.")
+                self.ws.files.upload(putative_file,
+                                     target="input_provision/",
+                                     flatten=True)
+                self.logger.info(f"Finish upload {putative_file}.")
+            s3_location = self.ws.files.s3_urls(target)[0]
+            input_json_str = re.sub(putative_file, s3_location, input_json_str)
+
+        # start build params_submit
+        self.params_submit = {
+            "outputs": "{}",
+            "submission_desc": submission_desc,
+            "call_caching": call_caching,
+        }
+
+        # if the input json is a batch or singleton submission
+        input_json = json.loads(input_json_str)
+        if isinstance(input_json, list):  # batch mode
+            self.logger.info("Batch mode found.")
+
+            # build data model for batch mode
+            inputs_list = input_json
+            df = pd.DataFrame(inputs_list)
+            id_col = f"{data_model_name}_id"
+            columns = [
+                id_col,
+            ]
+            columns.extend(df.columns)
+            df[id_col] = [f"tmp_{x}" for x in list(range(len(df)))]
+            df = df.reindex(columns=columns)
+            columns = [key.split(".")[-1] for key in df.columns.to_list()]
+            df.columns = pd.Index(columns)
+
+            # write data models
+            self.ws.data_models.write({data_model_name: df.map(str)},
+                                      force=True)
+            self.logger.info("Set data model successfully.")
+
+            # match the batch sytax of Bio-OS
+            unupdate_dict = inputs_list[0]
+            for key, _ in unupdate_dict.items():
+                unupdate_dict[key] = f'this.{key.split(".")[-1]}'
+
+            self.params_submit["inputs"] = json.dumps(unupdate_dict)
+            self.params_submit["data_model_name"] = data_model_name
+            self.params_submit["row_ids"] = df[id_col].to_list()
+
+        else:  # singleton mode
+            self.logger.info("Singleton mode found.")
+            self.params_submit["inputs"] = json.dumps(input_json)
+
+        self.logger.info("Build params dict successfully.")
+        return self.params_submit
+
     def postprocess(self, download=False):
         # 假设全部执行完毕
         #  对运行完成的目录进行下载
@@ -266,11 +361,11 @@ def bioos_workflow():
                 secret_key=parsed_args.sk)
     bw = Bioos_workflow(workspace_name=parsed_args.workspace_name,
                         workflow_name=parsed_args.workflow_name)
-    bw.preprocess(input_json_file=parsed_args.input_json,
-                  data_model_name=parsed_args.data_model_name,
-                  submission_desc=parsed_args.submission_desc,
-                  call_caching=parsed_args.call_caching,
-                  force_reupload=parsed_args.force_reupload)
+    bw.preprocess2(input_json_file=parsed_args.input_json,
+                   data_model_name=parsed_args.data_model_name,
+                   submission_desc=parsed_args.submission_desc,
+                   call_caching=parsed_args.call_caching,
+                   force_reupload=parsed_args.force_reupload)
     bw.submit_workflow_bioosapi()
 
     # moniter
