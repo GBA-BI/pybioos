@@ -513,9 +513,14 @@ class Workflow(metaclass=SingletonType):
             return ""
         return res["ID"].iloc[0]
 
-    def submit(self, data_model_name: str, row_ids: List[str], inputs: str, outputs: str,
-               submission_desc: str, call_caching: bool, submission_name_suffix: str = "") \
-            -> List[Run]:
+    def submit(self,
+               inputs: str,
+               outputs: str,
+               submission_desc: str,
+               call_caching: bool,
+               submission_name_suffix: str = "",
+               row_ids: List[str] = [],
+               data_model_name: str = '') -> List[Run]:
         """Submit an existed workflow.
 
         *Example*:
@@ -547,44 +552,40 @@ class Workflow(metaclass=SingletonType):
         :return: Result Runs corresponding to submitted workflows
         :rtype: List[Run]
         """
-        if not row_ids:
-            raise ParameterError("row_ids")
+
         if not inputs and not is_json(inputs):
             raise ParameterError('inputs')
         if not outputs and not is_json(outputs):
             raise ParameterError('outputs')
-
-        data_model_id = self.query_data_model_id(data_model_name)
-        if not data_model_id:
-            raise ParameterError("data_model_name")
-
         if not submission_name_suffix:
             submission_name_suffix = datetime.now().strftime(
                 '%Y-%m-%d-%H-%M-%S')
-        submission_id = Config.service().create_submission({
-            "ClusterID":
-            self.get_cluster,
-            'WorkspaceID':
-            self.workspace_id,
-            'WorkflowID':
-            self.id,
-            'Name':
-            workflows.submission_name(self.name, submission_name_suffix),
-            'Description':
-            submission_desc,
-            'DataModelID':
-            data_model_id,
-            'DataModelRowIDs':
-            row_ids,
-            'Inputs':
-            inputs,
+
+        params = {
+            "ClusterID": self.get_cluster,
+            'WorkspaceID': self.workspace_id,
+            'WorkflowID': self.id,
+            'Name': workflows.submission_name(self.name,
+                                              submission_name_suffix),
+            'Description': submission_desc,
+            'Inputs': inputs,
             'ExposedOptions': {
                 "ReadFromCache": call_caching,
                 # TODO this may change in the future
                 "ExecutionRootDir": f"s3://{self.bucket}"
             },
-            'Outputs':
-            outputs,
-        }).get("ID")
+            'Outputs': outputs,
+        }
+
+        # It is batch mode when data_model_name and row_ids are specified.
+        if data_model_name and row_ids:
+            data_model_id = self.query_data_model_id(data_model_name)
+            if not data_model_id:
+                raise ParameterError("data_model_name")
+
+            params['DataModelID'] = data_model_id
+            params['DataModelRowIDs'] = row_ids
+
+        submission_id = Config.service().create_submission(params).get("ID")
 
         return Submission(self.workspace_id, submission_id).runs
