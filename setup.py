@@ -14,14 +14,9 @@ setup(
     packages=find_packages(),
     platforms="any",
     install_requires=[
-        "volcengine>=1.0.61",
-        "tabulate>=0.8.10",
-        "click>=8.0.0",
-        "pandas>=1.3.0",
-        "tos==2.5.6",
-        "cachetools>=5.2.0",
-        "typing-extensions>=4.4.0",
-        "apscheduler>=3.10.4",
+        "volcengine>=1.0.61", "tabulate>=0.8.10", "click>=8.0.0",
+        "pandas>=1.3.0", "tos==2.5.6", "cachetools>=5.2.0",
+        "typing-extensions>=4.4.0", "apscheduler>=3.10.4", "colorama>=0.4.6"
     ],
     classifiers=[
         "Programming Language :: Python :: 3",
