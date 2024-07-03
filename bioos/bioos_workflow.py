@@ -234,7 +234,7 @@ class Bioos_workflow:
             df.columns = pd.Index(columns)
 
             # write data models
-            self.ws.data_models.write({data_model_name: df.map(str)},
+            self.ws.data_models.write({data_model_name: df.applymap(str)},
                                       force=True)
             self.logger.info("Set data model successfully.")
 
