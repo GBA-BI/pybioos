@@ -25,8 +25,14 @@ class FileResource(metaclass=SingletonType):
         res = Config.service().get_tos_access({
             'WorkspaceID': self.workspace_id,
         })  # 这里触发的是后端的返回行为，返回值无定义python类型
-        self.endpoint = s3_endpoint_mapping(res["Endpoint"])
-        self.region = res["Region"]
+
+        if "Endpoint" in res and "Region" in res:
+            self.endpoint = s3_endpoint_mapping(res["Endpoint"])
+            self.region = res["Region"]
+        else:
+            self.endpoint = "https://tos.miracle.ac.cn"
+            self.region = "cn-guangzhou-swd"
+
         self.tos_handler = TOSHandler(  #需要注意
             tos.TosClientV2(  # 2.6.6中tos下还要有一层
                 ak=None,
