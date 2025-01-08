@@ -19,7 +19,8 @@ $ python setup.py install
 See Example_usage.ipynb
 
 
-Or use as CLI command:
+Or use as CLI command.
+Use bw to submit a workflow run.
 ```
 $ bw -h
 usage: bw [-h] [--endpoint ENDPOINT] [--ak AK] [--sk SK] [--workspace_name WORKSPACE_NAME] [--workflow_name WORKFLOW_NAME] [--input_json INPUT_JSON]
@@ -49,4 +50,27 @@ options:
   --monitor_interval MONITOR_INTERVAL
                         Time interval for query the status for the submission runs.
   --download_results    Download the submission run result files to local current path.
+```
+
+Use bw_import to import a workflow to Bio-OS instance platform.
+```
+$ bw_import -h
+usage: bw_import [-h] --ak AK --sk SK --workspace_name WORKSPACE_NAME --workflow_name WORKFLOW_NAME --workflow_source WORKFLOW_SOURCE [--workflow_desc WORKFLOW_DESC] [--main_path MAIN_PATH]
+
+Bio-OS Workflow Import Tool
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --ak AK               Access key for your Bio-OS instance platform account
+  --sk SK               Secret key for your Bio-OS instance platform account
+  --workspace_name WORKSPACE_NAME
+                        Target workspace name
+  --workflow_name WORKFLOW_NAME
+                        Name for the workflow to be imported
+  --workflow_source WORKFLOW_SOURCE
+                        Local WDL file path or git repository URL
+  --workflow_desc WORKFLOW_DESC
+                        Description for the workflow
+  --main_path MAIN_PATH
+                        Main workflow file path (required for git repository)
 ```

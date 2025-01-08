@@ -1,4 +1,8 @@
+import base64
+import os
+import zipfile
 from datetime import datetime
+from io import BytesIO
 from typing import List
 
 import pandas as pd
@@ -16,6 +20,31 @@ UNKNOWN = "Unknown"
 SUBMISSION_STATUS = Literal["Succeeded", "Failed", "Running", "Pending"]
 RUN_STATUS = Literal["Succeeded", "Failed", "Running", "Pending"]
 WORKFLOW_LANGUAGE = Literal["WDL"]
+
+
+def zip_files(source_files, zip_type='base64'):
+    # 创建一个内存中的字节流对象
+    buffer = BytesIO()
+
+    # 使用 zipfile 模块创建一个 ZIP 文件对象
+    with zipfile.ZipFile(buffer, 'w', zipfile.ZIP_DEFLATED,
+                         compresslevel=9) as zip_file:
+        for f in source_files:
+            # 将文件添加到 ZIP 中
+            # 假设每个 f 是一个字典，包含 'name' 和 'originFile' 键
+            zip_file.writestr(f['name'], f['originFile'])
+
+    # 获取 ZIP 数据
+    zip_data = buffer.getvalue()
+
+    if zip_type == 'base64':
+        # 将 ZIP 数据编码为 base64
+        return base64.b64encode(zip_data).decode('utf-8')
+    elif zip_type == 'blob':
+        # 直接返回二进制数据
+        return zip_data
+    else:
+        raise ValueError("zip_type must be 'base64' or 'blob'")
 
 
 class Run(metaclass=SingletonType):  # 单例模式，why
@@ -345,11 +374,11 @@ class WorkflowResource(metaclass=SingletonType):
     def import_workflow(self,
                         source: str,
                         name: str,
-                        language: WORKFLOW_LANGUAGE,
-                        tag: str,
-                        main_workflow_path: str,
-                        description: str = "",
-                        token: str = "") -> str:
+                        description: str,
+                        language: WORKFLOW_LANGUAGE = "WDL",
+                        tag: str = "",
+                        main_workflow_path: str = "",
+                        token: str = "") -> dict:
         """Imports a workflow .
 
         *Example*:
@@ -387,23 +416,44 @@ class WorkflowResource(metaclass=SingletonType):
         else:
             raise ParameterError("name", name)
 
-        if not (source.startswith("http://") or source.startswith("https://")):
-            raise ParameterError("source", source)
         if language != "WDL":
             raise ParameterError("language", language)
 
-        params = {
-            "WorkspaceID": self.workspace_id,
-            "Name": name,
-            "Description": description,
-            "Language": language,
-            "Source": source,
-            "Tag": tag,
-            "MainWorkflowPath": main_workflow_path,
-        }
-        if token:
-            params["Token"] = token
-        return Config.service().create_workflow(params).get("ID")
+        if source.startswith("http://") or source.startswith("https://"):
+            params = {
+                "WorkspaceID": self.workspace_id,
+                "Name": name,
+                "Description": description,
+                "Language": language,
+                "Source": source,
+                "Tag": tag,
+                "MainWorkflowPath": main_workflow_path,
+                "SourceType": "git",
+            }
+            if token:
+                params["Token"] = token
+        elif os.path.exists(source):
+            source_files = [{
+                "name": os.path.basename(source),
+                "originFile": open(source, "rb").read()
+            }]
+            zip_base64 = zip_files(source_files, 'base64')
+
+            main_workflow_path = os.path.basename(source)
+            params = {
+                "WorkspaceID": self.workspace_id,
+                "Name": name,
+                "Description": description,
+                "Language": language,
+                # "Source": source,
+                "SourceType": "file",
+                "Content": zip_base64,
+                "MainWorkflowPath": main_workflow_path,
+            }
+        else:
+            raise ParameterError("source", source)
+
+        return Config.service().create_workflow(params)
 
     def list(self) -> DataFrame:
         """Lists all workflows' information .
@@ -430,7 +480,7 @@ class WorkflowResource(metaclass=SingletonType):
         res_df['UpdateTime'] = pd.to_datetime(
             res_df['UpdateTime'], unit='ms', origin=pd.Timestamp('2018-07-01'))
 
-        return res_df.drop("Status", axis=1)
+        return res_df
 
     def delete(self, target: str):
         """Deletes a workflow from the workspace .

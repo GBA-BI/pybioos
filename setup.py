@@ -26,5 +26,8 @@ setup(
     ],
     include_package_data=True,
     entry_points={
-        'console_scripts': ['bw=bioos.bioos_workflow:bioos_workflow']
+        'console_scripts': [
+            'bw=bioos.bioos_workflow:bioos_workflow',
+            'bw_import=bioos.bw_import:bioos_workflow_import'
+        ]
     })
