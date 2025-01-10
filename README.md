@@ -2,6 +2,8 @@
 
 Python SDK for Bio-OS.
 
+[![Documentation Status](https://readthedocs.org/projects/pybioos/badge/?version=latest)](https://pybioos.readthedocs.io/en/latest/?badge=latest)
+
 # Installation
 From PYPI.
 ```
@@ -14,6 +16,10 @@ $ git clone https://github.com/GBA-BI/pybioos.git
 $ cd pybioos
 $ python setup.py install
 ```
+
+# Documentation
+
+The full documentation is available at [https://pybioos.readthedocs.io/](https://pybioos.readthedocs.io/).
 
 # Example usage
 See Example_usage.ipynb
