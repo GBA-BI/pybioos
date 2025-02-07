@@ -145,7 +145,8 @@ def bioos_workflow_import():
             else:
                 # 如果没有设置monitor参数，直接退出
                 logger.info(
-                    f"Workflow {args.workflow_name} submitted successfully")
+                    f"Workflow {args.workflow_name} submitted successfully, {result}"
+                )
                 sys.exit(0)
 
         except Exception as e:
