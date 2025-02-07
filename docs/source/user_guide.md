@@ -13,6 +13,8 @@ pybioos 是 Bio-OS 平台的 Python SDK，提供了丰富的功能来管理和�
     - [bw\_import](#bw_import)
       - [用法](#用法)
       - [参数说明](#参数说明)
+      - [工作模式](#工作模式)
+      - [返回值](#返回值)
     - [bw](#bw)
       - [用法](#用法-1)
       - [参数说明](#参数说明-1)
@@ -51,7 +53,7 @@ pybioos 提供了两个主要的命令行工具：`bw_import` 和 `bw`。
 
 ### bw_import
 
-`bw_import` 用于导入工作流到 Bio-OS 平台。
+`bw_import` 用于导入工作流到 Bio-OS 平台。支持两种工作模式：快速导入和监控模式。
 
 #### 用法
 
@@ -62,18 +64,52 @@ bw_import --ak <access_key> \
          --workflow_name <workflow_name> \
          --workflow_source <workflow_source> \
          [--workflow_desc <description>] \
-         [--main_path <main_workflow_path>]
+         [--main_path <main_workflow_path>] \
+         [--monitor] \
+         [--monitor_interval <interval>]
 ```
 
 #### 参数说明
 
+必需参数：
 - `--ak`: Bio-OS 平台的访问密钥
 - `--sk`: Bio-OS 平台的密钥
 - `--workspace_name`: 目标工作空间名称
 - `--workflow_name`: 要导入的工作流名称
 - `--workflow_source`: 工作流源文件路径或 Git 仓库 URL
-- `--workflow_desc`: (可选) 工作流描述
-- `--main_path`: (可选) 主工作流文件路径（对于 Git 仓库必需）
+
+可选参数：
+- `--workflow_desc`: 工作流描述
+- `--main_path`: 主工作流文件路径（对于 Git 仓库必需）
+- `--monitor`: 启用监控模式，监控工作流验证状态直到完成
+- `--monitor_interval`: 状态检查间隔时间（秒），默认为 30 秒
+
+#### 工作模式
+
+1. 快速导入模式（默认）：
+   - 工作流上传后立即返回
+   - 适合批量导入或脚本集成
+   - 示例：
+     ```bash
+     bw_import --ak <ak> --sk <sk> --workspace_name <ws> \
+               --workflow_name <wf> --workflow_source <source>
+     ```
+
+2. 监控模式：
+   - 工作流上传后进入监控状态
+   - 定期检查验证进度
+   - 等待验证完成才退出
+   - 适合交互式使用
+   - 示例：
+     ```bash
+     bw_import --ak <ak> --sk <sk> --workspace_name <ws> \
+               --workflow_name <wf> --workflow_source <source> \
+               --monitor --monitor_interval 60
+     ```
+
+#### 返回值
+- 成功：返回 0
+- 失败：返回 1（包括验证失败和超时）
 
 ### bw
 

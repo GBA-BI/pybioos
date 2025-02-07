@@ -58,6 +58,15 @@ def bioos_workflow_import():
         '--main_path',
         help='Main workflow file path (required for git repository)',
         default='')
+    parser.add_argument(
+        '--monitor',
+        action='store_true',
+        help='Monitor the workflow validation status until completion')
+    parser.add_argument(
+        '--monitor_interval',
+        type=int,
+        default=60,
+        help='Time interval in seconds for checking workflow status')
 
     args = parser.parse_args()
     logger = get_logger()
@@ -91,46 +100,53 @@ def bioos_workflow_import():
                 f"Successfully uploaded workflow: {result}, validating..., please wait..."
             )
 
-            # 循环检查工作流状态
-            max_retries = 10  # 最大重试次数
-            retry_count = 0
+            # 如果设置了monitor参数，则监控工作流状态
+            if args.monitor:
+                max_retries = 10  # 最大重试次数
+                retry_count = 0
 
-            while retry_count < max_retries:
-                df = workflow_resource.list()
-                workflow_info = df[df.Name == args.workflow_name]
+                while retry_count < max_retries:
+                    df = workflow_resource.list()
+                    workflow_info = df[df.Name == args.workflow_name]
 
-                if len(workflow_info) == 1:
-                    status = workflow_info.iloc[0]["Status"]["Phase"]
+                    if len(workflow_info) == 1:
+                        status = workflow_info.iloc[0]["Status"]["Phase"]
 
-                    if status == "Succeeded":
-                        logger.info(
-                            f"Workflow {args.workflow_name} validated successfully"
-                        )
-                        sys.exit(0)
-                    elif status == "Failed":
-                        logger.error(
-                            f"Workflow {args.workflow_name} validation failed")
-                        sys.exit(1)
-                    elif status == "Importing":
-                        logger.info(
-                            f"Workflow {args.workflow_name} is still validating, please wait..."
-                        )
-                        time.sleep(30)
-                        retry_count += 1
+                        if status == "Succeeded":
+                            logger.info(
+                                f"Workflow {args.workflow_name} validated successfully"
+                            )
+                            sys.exit(0)
+                        elif status == "Failed":
+                            logger.error(
+                                f"Workflow {args.workflow_name} validation failed"
+                            )
+                            sys.exit(1)
+                        elif status == "Importing":
+                            logger.info(
+                                f"Workflow {args.workflow_name} is still validating, please wait..."
+                            )
+                            time.sleep(args.monitor_interval)
+                            retry_count += 1
+                        else:
+                            logger.error(
+                                f"Workflow {args.workflow_name} has unknown status: {status}"
+                            )
+                            sys.exit(1)
                     else:
                         logger.error(
-                            f"Workflow {args.workflow_name} has unknown status: {status}"
+                            f"Workflow {args.workflow_name} not found after import"
                         )
                         sys.exit(1)
-                else:
-                    logger.error(
-                        f"Workflow {args.workflow_name} not found after upload"
-                    )
-                    sys.exit(1)
 
-            logger.error(
-                f"Workflow validation timeout after {max_retries} retries")
-            sys.exit(1)
+                logger.error(
+                    f"Workflow validation timeout after {max_retries} retries")
+                sys.exit(1)
+            else:
+                # 如果没有设置monitor参数，直接退出
+                logger.info(
+                    f"Workflow {args.workflow_name} submitted successfully")
+                sys.exit(0)
 
         except Exception as e:
             logger.error(f"Failed to import workflow: {str(e)}")
