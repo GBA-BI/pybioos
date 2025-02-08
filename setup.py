@@ -28,6 +28,9 @@ setup(
     entry_points={
         'console_scripts': [
             'bw=bioos.bioos_workflow:bioos_workflow',
-            'bw_import=bioos.bw_import:bioos_workflow_import'
+            'bw_import=bioos.bw_import:bioos_workflow_import',
+            'bw_import_status_check=bioos.bw_import_status_check:bioos_workflow_status_check',
+            'bw_status_check=bioos.bw_status_check:bioos_workflow_status_check',
+            'get_submission_logs=bioos.get_submission_logs:get_submission_logs'
         ]
     })

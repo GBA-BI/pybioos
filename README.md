@@ -80,3 +80,39 @@ optional arguments:
   --main_path MAIN_PATH
                         Main workflow file path (required for git repository)
 ```
+
+Use bw_status_check to check the status of workflow runs.
+```
+$ bw_status_check -h
+usage: bw_status_check [-h] --ak AK --sk SK --workspace_name WORKSPACE_NAME --submission_id SUBMISSION_ID
+
+Bio-OS Workflow Run Status Check Tool
+
+options:
+  -h, --help            show this help message and exit
+  --ak AK              Access key for your Bio-OS instance platform account
+  --sk SK              Secret key for your Bio-OS instance platform account
+  --workspace_name WORKSPACE_NAME
+                        Target workspace name
+  --submission_id SUBMISSION_ID
+                        ID of the submission to check
+```
+
+Use get_submission_logs to download workflow submission logs.
+```
+$ get_submission_logs -h
+usage: get_submission_logs [-h] --ak AK --sk SK --workspace_name WORKSPACE_NAME --submission_id SUBMISSION_ID [--output_dir OUTPUT_DIR]
+
+Bio-OS Workflow Submission Logs Download Tool
+
+options:
+  -h, --help            show this help message and exit
+  --ak AK              Access key for your Bio-OS instance platform account
+  --sk SK              Secret key for your Bio-OS instance platform account
+  --workspace_name WORKSPACE_NAME
+                        Target workspace name
+  --submission_id SUBMISSION_ID
+                        ID of the submission to download logs
+  --output_dir OUTPUT_DIR
+                        Local directory to save the logs (default: current directory)
+```

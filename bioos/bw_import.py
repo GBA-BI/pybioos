@@ -145,7 +145,7 @@ def bioos_workflow_import():
             else:
                 # 如果没有设置monitor参数，直接退出
                 logger.info(
-                    f"Workflow {args.workflow_name} submitted successfully, {result}"
+                    f"Workflow {args.workflow_name} is still validating, {result}, please wait and check the status later."
                 )
                 sys.exit(0)
 

@@ -15,9 +15,15 @@ pybioos 是 Bio-OS 平台的 Python SDK，提供了丰富的功能来管理和�
       - [参数说明](#参数说明)
       - [工作模式](#工作模式)
       - [返回值](#返回值)
-    - [bw](#bw)
+    - [bw\_import\_status\_check](#bw_import_status_check)
       - [用法](#用法-1)
       - [参数说明](#参数说明-1)
+    - [bw](#bw)
+      - [用法](#用法-2)
+      - [参数说明](#参数说明-2)
+    - [bw_status_check](#bw_status_check)
+      - [用法](#用法-3)
+      - [参数说明](#参数说明-3)
   - [Python API](#python-api)
     - [基础功能](#基础功能)
       - [登录和状态检查](#登录和状态检查)
@@ -111,6 +117,39 @@ bw_import --ak <access_key> \
 - 成功：返回 0
 - 失败：返回 1（包括验证失败和超时）
 
+### bw_import_status_check
+
+`bw_import_status_check` 用于异步查询工作流导入验证状态。当使用 `bw_import` 的快速导入模式时，可以使用此命令来检查工作流的验证状态。
+
+#### 用法
+
+```bash
+bw_import_status_check --ak <access_key> \
+                      --sk <secret_key> \
+                      --workspace_name <workspace_name> \
+                      --workflow_id <workflow_id>
+```
+
+#### 参数说明
+
+必需参数：
+- `--ak`: Bio-OS 平台的访问密钥
+- `--sk`: Bio-OS 平台的密钥
+- `--workspace_name`: 目标工作空间名称
+- `--workflow_id`: 要检查的工作流 ID
+
+#### 输出格式
+```
+Status: <status>
+Message: <message>  # 如果有错误消息
+```
+
+可能的状态值：
+- Succeeded: 验证成功
+- Failed: 验证失败
+- Importing: 正在导入
+- 其他状态
+
 ### bw
 
 `bw` 用于提交和管理工作流运行。
@@ -135,19 +174,61 @@ bw --endpoint <endpoint> \
 
 #### 参数说明
 
-- `--endpoint`: Bio-OS 平台的 API 端点
+必需参数：
 - `--ak`: Bio-OS 平台的访问密钥
 - `--sk`: Bio-OS 平台的密钥
 - `--workspace_name`: 工作空间名称
 - `--workflow_name`: 工作流名称
 - `--input_json`: 输入参数 JSON 文件
-- `--data_model_name`: (可选) 数据模型名称
-- `--call_caching`: (可选) 启用调用缓存
-- `--submission_desc`: (可选) 提交描述
-- `--force_reupload`: (可选) 强制重新上传已存在的文件
-- `--monitor`: (可选) 监控提交运行状态直到完成
-- `--monitor_interval`: (可选) 状态查询间隔时间（秒）
-- `--download_results`: (可选) 下载运行结果到本地
+
+可选参数：
+- `--endpoint`: Bio-OS 平台的 API 端点
+- `--data_model_name`: 数据模型名称
+- `--call_caching`: 启用调用缓存
+- `--submission_desc`: 提交描述
+- `--force_reupload`: 强制重新上传已存在的文件
+- `--monitor`: 监控提交运行状态直到完成
+- `--monitor_interval`: 状态查询间隔时间（秒）
+- `--download_results`: 下载运行结果到本地
+
+### bw_status_check
+
+`bw_status_check` 用于查询工作流运行状态。当使用 `bw` 命令提交工作流后，可以使用此命令来检查所有运行的状态。
+
+#### 用法
+
+```bash
+bw_status_check --ak <access_key> \
+                --sk <secret_key> \
+                --workspace_name <workspace_name> \
+                --submission_id <submission_id>
+```
+
+#### 参数说明
+
+必需参数：
+- `--ak`: Bio-OS 平台的访问密钥
+- `--sk`: Bio-OS 平台的密钥
+- `--workspace_name`: 目标工作空间名称
+- `--submission_id`: 要检查的提交 ID
+
+#### 输出格式
+```
+Submission ID: <submission_id>
+Runs Status:
+------------------------------------------------------------
+Run ID                                   Status     Message
+------------------------------------------------------------
+<run_id>                                <status>   <message>
+...
+```
+
+可能的状态值：
+- Succeeded: 运行成功
+- Failed: 运行失败
+- Running: 正在运行
+- Pending: 等待运行
+- Unknown: 未知状态
 
 ## Python API
 

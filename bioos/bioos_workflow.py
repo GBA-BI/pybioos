@@ -277,8 +277,13 @@ class Bioos_workflow:
             self.logger.info("Download finish.")
 
     def submit_workflow_bioosapi(self):
+        """Submit workflow using Bio-OS API"""
         self.runs = self.wf.submit(**self.params_submit)
-        self.logger.info("Submit workflow run successfully.")
+        submission_id = self.runs[0].submission
+        run_id = self.runs[0].id
+        self.logger.info(
+            f"Submit workflow run successfully. Submission ID: {submission_id}, Run ID: {run_id}"
+        )
         return self.runs
 
     def monitor_workflow(self):
