@@ -81,6 +81,23 @@ optional arguments:
                         Main workflow file path (required for git repository)
 ```
 
+Use bw_import_status_check to check the workflow import status.
+```
+$ bw_import_status_check -h
+usage: bw_import_status_check [-h] --ak AK --sk SK --workspace_name WORKSPACE_NAME --workflow_id WORKFLOW_ID
+
+Bio-OS Workflow Import Status Check Tool
+
+options:
+  -h, --help            show this help message and exit
+  --ak AK              Access key for your Bio-OS instance platform account
+  --sk SK              Secret key for your Bio-OS instance platform account
+  --workspace_name WORKSPACE_NAME
+                        Target workspace name
+  --workflow_id WORKFLOW_ID
+                        ID of the workflow to check
+```
+
 Use bw_status_check to check the status of workflow runs.
 ```
 $ bw_status_check -h
