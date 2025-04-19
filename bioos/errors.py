@@ -21,7 +21,7 @@ class EnvironmentConfigurationError(ConfigurationError):
 
     def __init__(self, env: str):
         """Initialize the EnvironmentConfigurationError .
-        
+
         :param env: environment name of the configuration
         :type env: str
         """
@@ -51,13 +51,16 @@ class ParameterError(Exception):
     """Exception indicating a required parameter not valid
     """
 
-    def __init__(self, name: str):
+    def __init__(self, name: str, msg: str = None):
         """Initialize the ParameterError .
 
         :param name: name of the parameter
         :type name: str
         """
-        self.message = "parameter '{}' invalid / not found".format(name)
+        self.name = name
+        self.message = f"parameter '{name}' invalid / not found"
+        if msg:
+            self.message += f": {msg}"
         super().__init__(self.message)
 
 
