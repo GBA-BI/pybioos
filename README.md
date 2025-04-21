@@ -63,6 +63,8 @@ Use bw_import to import a workflow to Bio-OS instance platform.
 $ bw_import -h
 usage: bw_import [-h] --ak AK --sk SK --workspace_name WORKSPACE_NAME --workflow_name WORKFLOW_NAME --workflow_source WORKFLOW_SOURCE [--workflow_desc WORKFLOW_DESC] [--main_path MAIN_PATH]
 
+This tool allows users to import workflows into a Bio-OS instance platform. It supports importing workflows from local WDL files, local directories containing WDL files, or Git repositories.
+
 Bio-OS Workflow Import Tool
 
 optional arguments:
@@ -74,11 +76,11 @@ optional arguments:
   --workflow_name WORKFLOW_NAME
                         Name for the workflow to be imported
   --workflow_source WORKFLOW_SOURCE
-                        Local WDL file path or git repository URL
+                        Path to a local WDL file, or a local directory containing WDL file(s). It can also be a Git repository URL.
   --workflow_desc WORKFLOW_DESC
                         Description for the workflow
   --main_path MAIN_PATH
-                        Main workflow file path (required for git repository)
+                        Path to the main WDL workflow file. This is required when --workflow_source is a local directory. If --workflow_source is a single WDL file, this argument is optional and defaults to the path provided in --workflow_source. This is also required when --workflow_source is a Git repository URL pointing to a directory.
 ```
 
 Use bw_import_status_check to check the workflow import status.

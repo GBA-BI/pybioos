@@ -417,7 +417,7 @@ class WorkflowResource(metaclass=SingletonType):
             raise ParameterError("name", name)
 
         if language != "WDL":
-            raise ParameterError("language", language)
+            raise ParameterError("language", f"Unsupported language: '{language}'. Only 'WDL' is supported.")
 
         if source.startswith("http://") or source.startswith("https://"):
             params = {
@@ -432,7 +432,50 @@ class WorkflowResource(metaclass=SingletonType):
             }
             if token:
                 params["Token"] = token
-        elif os.path.exists(source):
+            return Config.service().create_workflow(params)
+        elif os.path.isdir(source):
+            # 扫描文件夹中的所有 WDL 文件，并构建相对路径
+            # 用 source 来检验上传的是否是文件夹
+            source_files = []
+            for root, _, files in os.walk(source):
+                for file in files:
+                    if file.endswith('.wdl'):
+                        full_path = os.path.join(root, file)
+                        relative_path = os.path.relpath(full_path, source)  # 获取文件相对于source的相对路径。
+                        source_files.append({
+                            "name": relative_path,  # 使用相对路径
+                            "originFile": open(full_path, "rb").read()
+                        })
+
+            if not source_files:
+                raise ParameterError("source", "No WDL files found in the specified folder")
+
+            # 确保主工作流路径是相对路径
+            if main_workflow_path:
+                if not os.path.exists(main_workflow_path):
+                    raise ParameterError("main_workflow_path", f"Main workflow file {main_workflow_path} not found")
+                main_relative = os.path.relpath(main_workflow_path, source)
+            else:
+                main_relative = None
+
+            zip_base64 = zip_files(source_files, "base64")
+
+            params = {
+                "WorkspaceID": self.workspace_id,
+                "Name": name,
+                "Description": description,
+                "Language": language,
+                "SourceType": "file",
+                "Content": zip_base64,
+            }
+            if main_relative:
+                params["MainWorkflowPath"] = os.path.basename(main_relative)
+            if token:
+                params["Token"] = token
+
+            return Config.service().create_workflow(params)
+        #单文件上传
+        elif os.path.isfile(source) and source.endswith('.wdl'):
             source_files = [{
                 "name": os.path.basename(source),
                 "originFile": open(source, "rb").read()
@@ -450,10 +493,9 @@ class WorkflowResource(metaclass=SingletonType):
                 "Content": zip_base64,
                 "MainWorkflowPath": main_workflow_path,
             }
+            return Config.service().create_workflow(params)
         else:
-            raise ParameterError("source", source)
-
-        return Config.service().create_workflow(params)
+            raise ParameterError("source",f"Workflow source '{source}' does not exist.")
 
     def list(self) -> DataFrame:
         """Lists all workflows' information .
