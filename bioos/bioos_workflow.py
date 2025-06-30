@@ -4,11 +4,42 @@ import logging
 import os
 import re
 import time
+from typing import Dict, Any
 
 import pandas as pd
 
 from bioos import bioos
 from bioos.errors import NotFoundError, ParameterError
+
+def uniquify_columns(cols: list[str]) -> list[str]:
+
+    seen, out = set(), []
+    for full in cols:
+        parts = full.split('.')
+        short = parts[-1]
+        cand  = short
+
+        if cand in seen:                       # 冲突时加前缀
+            prefix = parts[-2]                 # 取倒数第二段
+            cand   = f"{prefix}_{short}"
+
+            # 如果仍冲突，再逐级往前加
+            idx = -3
+            while cand in seen and abs(idx) <= len(parts):
+                prefix = parts[idx]
+                cand   = f"{prefix}_{cand}"
+                idx   -= 1
+
+            # 万一全冲突，再加 _1 / _2
+            n = 1
+            base = cand
+            while cand in seen:
+                cand = f"{base}_{n}"
+                n += 1
+
+        seen.add(cand)
+        out.append(cand)
+    return out
 
 
 def recognize_files_from_input_json(workflow_input_json: dict) -> dict:
@@ -232,6 +263,7 @@ class Bioos_workflow:
             df = df.reindex(columns=columns)
             columns = [key.split(".")[-1] for key in df.columns.to_list()]
             df.columns = pd.Index(columns)
+            #df.columns = pd.Index(uniquify_columns(df.columns.to_list()))
 
             # write data models
             self.ws.data_models.write({data_model_name: df.applymap(str)},
@@ -239,9 +271,18 @@ class Bioos_workflow:
             self.logger.info("Set data model successfully.")
 
             # match the batch sytax of Bio-OS
+            """
             unupdate_dict = inputs_list[0]
             for key, _ in unupdate_dict.items():
                 unupdate_dict[key] = f'this.{key.split(".")[-1]}'
+
+            """
+
+            unupdate_dict = inputs_list[0]
+            input_cols_unique = df.columns[1:]
+
+            for orig_key, col_name in zip(unupdate_dict.keys(), input_cols_unique):
+                unupdate_dict[orig_key] = f"this.{col_name}"
 
             self.params_submit["inputs"] = json.dumps(unupdate_dict)
             self.params_submit["data_model_name"] = data_model_name
@@ -254,7 +295,7 @@ class Bioos_workflow:
         self.logger.info("Build params dict successfully.")
         return self.params_submit
 
-    def postprocess(self, download=False):
+    def postprocess(self, download=False,download_dir="."):
         # 假设全部执行完毕
         #  对运行完成的目录进行下载
         # 证实bioos包只能对文件的list进行下载，不支持文件夹
@@ -268,9 +309,10 @@ class Bioos_workflow:
 
                     files.append(file)
 
-        if download:
+        if download and files:
+            os.makedirs(download_dir, exist_ok=True)
             try:
-                self.ws.files.download(files, ".", flatten=False)
+                self.ws.files.download(files, download_dir, flatten=False)
             except Exception as e:
                 print(f'Some file can not download. \n {e}')
 
@@ -357,6 +399,11 @@ def bioos_workflow():
         "--download_results",
         action='store_true',
         help="Download the submission run result files to local current path.")
+    parser.add_argument(
+        "--download_dir",
+        type=str,
+        default=".",
+        help="本地保存下载结果的目录（默认当前目录）")
 
     parsed_args = parser.parse_args()
 
@@ -395,5 +442,5 @@ def bioos_workflow():
         print(bw.runs)
 
         bw.logger.info("Start to postprocess.")
-        bw.postprocess(download=parsed_args.download_results)
+        bw.postprocess(download=parsed_args.download_results,download_dir = parsed_args.download_dir)
         bw.logger.info("Postprocess finished.")

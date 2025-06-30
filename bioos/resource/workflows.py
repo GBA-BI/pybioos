@@ -3,7 +3,7 @@ import os
 import zipfile
 from datetime import datetime
 from io import BytesIO
-from typing import List
+from typing import List, Dict, Optional, Any
 
 import pandas as pd
 from cachetools import TTLCache, cached
@@ -548,17 +548,62 @@ class WorkflowResource(metaclass=SingletonType):
 
 
 class Workflow(metaclass=SingletonType):
+    """Represents a workflow in Bio-OS.
+    
+    This class encapsulates all the information and operations related to a workflow,
+    including its metadata, inputs, outputs, and execution capabilities.
+    """
 
     def __init__(self,
                  name: str,
                  workspace_id: str,
                  bucket: str,
                  check: bool = False):
+        """Initialize a workflow instance.
+        
+        Args:
+            name: The name of the workflow
+            workspace_id: The ID of the workspace containing this workflow
+            bucket: The S3 bucket associated with this workflow
+            check: Whether to check the workflow existence immediately
+        """
         self.name = name
         self.workspace_id = workspace_id
         self.bucket = bucket
+        self._description: str = ""
+        self._create_time: int = 0
+        self._update_time: int = 0
+        self._language: str = "WDL"
+        self._source: str = ""
+        self._tag: str = ""
+        self._token: Optional[str] = None
+        self._main_workflow_path: str = ""
+        self._status: Dict[str, Optional[str]] = {"Phase": "", "Message": None}
+        self._inputs: List[Dict[str, Any]] = []
+        self._outputs: List[Dict[str, Any]] = []
+        self._owner_name: str = ""
+        self._graph: str = ""
+        self._source_type: str = ""
+        
         if check:
-            self.id
+            self.sync()
+
+    def __repr__(self):
+        """Return a string representation of the workflow."""
+        info_dict = dict_str({
+            "id": self.id,
+            "name": self.name,
+            "description": self.description,
+            "language": self.language,
+            "source": self.source,
+            "tag": self.tag,
+            "main_workflow_path": self.main_workflow_path,
+            "status": self.status,
+            "owner_name": self.owner_name,
+            "create_time": self.create_time,
+            "update_time": self.update_time
+        })
+        return f"WorkflowInfo:\n{info_dict}"
 
     @property
     @cached(cache=TTLCache(maxsize=100, ttl=1))
@@ -573,6 +618,141 @@ class Workflow(metaclass=SingletonType):
         if res.empty:
             raise ParameterError("name")
         return res["ID"].iloc[0]
+
+    @property
+    def description(self) -> str:
+        """Get the workflow description."""
+        if not self._description:
+            self.sync()
+        return self._description
+
+    @property
+    def create_time(self) -> int:
+        """Get the workflow creation timestamp."""
+        if not self._create_time:
+            self.sync()
+        return self._create_time
+
+    @property
+    def update_time(self) -> int:
+        """Get the workflow last update timestamp."""
+        if not self._update_time:
+            self.sync()
+        return self._update_time
+
+    @property
+    def language(self) -> str:
+        """Get the workflow language (e.g., WDL)."""
+        if not self._language:
+            self.sync()
+        return self._language
+
+    @property
+    def source(self) -> str:
+        """Get the workflow source location."""
+        if not self._source:
+            self.sync()
+        return self._source
+
+    @property
+    def tag(self) -> str:
+        """Get the workflow version tag."""
+        if not self._tag:
+            self.sync()
+        return self._tag
+
+    @property
+    def token(self) -> Optional[str]:
+        """Get the workflow access token if any."""
+        if not self._token:
+            self.sync()
+        return self._token
+
+    @property
+    def main_workflow_path(self) -> str:
+        """Get the main workflow file path."""
+        if not self._main_workflow_path:
+            self.sync()
+        return self._main_workflow_path
+
+    @property
+    def status(self) -> Dict[str, Optional[str]]:
+        """Get the workflow status information."""
+        if not self._status["Phase"]:
+            self.sync()
+        return self._status
+
+    @property
+    def inputs(self) -> List[Dict[str, Any]]:
+        """Get the workflow input parameters."""
+        if not self._inputs:
+            self.sync()
+        return self._inputs
+
+    @property
+    def outputs(self) -> List[Dict[str, Any]]:
+        """Get the workflow output parameters."""
+        if not self._outputs:
+            self.sync()
+        return self._outputs
+
+    @property
+    def owner_name(self) -> str:
+        """Get the workflow owner's name."""
+        if not self._owner_name:
+            self.sync()
+        return self._owner_name
+
+    @property
+    def graph(self) -> str:
+        """Get the workflow graph representation."""
+        if not self._graph:
+            self.sync()
+        return self._graph
+
+    @property
+    def source_type(self) -> str:
+        """Get the workflow source type."""
+        if not self._source_type:
+            self.sync()
+        return self._source_type
+
+    @cached(cache=TTLCache(maxsize=100, ttl=1))
+    def sync(self):
+        """Synchronize workflow information with the remote service."""
+        res = WorkflowResource(self.workspace_id). \
+            list().query(f"Name=='{self.name}'")
+        if res.empty:
+            raise ParameterError("name")
+            
+        # Get detailed workflow information
+        params = {
+            'WorkspaceID': self.workspace_id,
+            'Filter': {
+                'IDs': [res["ID"].iloc[0]]
+            }
+        }
+        workflows = Config.service().list_workflows(params).get('Items')
+        if len(workflows) != 1:
+            raise NotFoundError("workflow", self.name)
+            
+        detail = workflows[0]
+        
+        # Update all properties
+        self._description = detail.get("Description", "")
+        self._create_time = detail.get("CreateTime", 0)
+        self._update_time = detail.get("UpdateTime", 0)
+        self._language = detail.get("Language", "WDL")
+        self._source = detail.get("Source", "")
+        self._tag = detail.get("Tag", "")
+        self._token = detail.get("Token")
+        self._main_workflow_path = detail.get("MainWorkflowPath", "")
+        self._status = detail.get("Status", {"Phase": "", "Message": None})
+        self._inputs = detail.get("Inputs", [])
+        self._outputs = detail.get("Outputs", [])
+        self._owner_name = detail.get("OwnerName", "")
+        self._graph = detail.get("Graph", "")
+        self._source_type = detail.get("SourceType", "")
 
     @property
     @cached(cache=TTLCache(maxsize=100, ttl=1))
@@ -594,11 +774,14 @@ class Workflow(metaclass=SingletonType):
                 return info['ID']
         raise NotFoundError("cluster", "workflow")
 
-    def query_data_model_id(self, name: str) -> "":
+    def query_data_model_id(self, name: str) -> str:
         """Gets the id of given data_models among those accessible
 
-        :param name:
-        :return:
+        Args:
+            name: The name of the data model
+
+        Returns:
+            str: The ID of the data model, or empty string if not found
         """
         res = DataModelResource(self.workspace_id).list(). \
             query(f"Name=='{name}'")
