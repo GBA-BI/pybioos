@@ -12,33 +12,15 @@ from bioos import bioos
 from bioos.errors import NotFoundError, ParameterError
 
 def uniquify_columns(cols: list[str]) -> list[str]:
-
-    seen, out = set(), []
-    for full in cols:
-        parts = full.split('.')
-        short = parts[-1]
-        cand  = short
-
-        if cand in seen:                       # 冲突时加前缀
-            prefix = parts[-2]                 # 取倒数第二段
-            cand   = f"{prefix}_{short}"
-
-            # 如果仍冲突，再逐级往前加
-            idx = -3
-            while cand in seen and abs(idx) <= len(parts):
-                prefix = parts[idx]
-                cand   = f"{prefix}_{cand}"
-                idx   -= 1
-
-            # 万一全冲突，再加 _1 / _2
-            n = 1
-            base = cand
-            while cand in seen:
-                cand = f"{base}_{n}"
-                n += 1
-
-        seen.add(cand)
-        out.append(cand)
+    seen, out = {}, []
+    for col in cols:
+        base = col.split(".")[-1]
+        if base not in seen:
+            seen[base] = 0
+            out.append(base)
+        else:
+            seen[base] += 1
+            out.append(f"{base}_{seen[base]}")   # fastq → fastq_1 → fastq_2
     return out
 
 
@@ -199,6 +181,9 @@ class Bioos_workflow:
                     force_reupload: bool = False):
         if not os.path.isfile(input_json_file):
             raise ParameterError('Input_json_file is not found.')
+        #给每一个data_model加一个uuid，保证不重复
+        if data_model_name == "dm":
+            data_model_name = f"dm_{int(time.time())}"
 
         input_json = json.load(open(input_json_file))
         self.logger.info("Load json input successfully.")
@@ -262,8 +247,8 @@ class Bioos_workflow:
             df[id_col] = [f"tmp_{x}" for x in list(range(len(df)))]
             df = df.reindex(columns=columns)
             columns = [key.split(".")[-1] for key in df.columns.to_list()]
-            df.columns = pd.Index(columns)
-            #df.columns = pd.Index(uniquify_columns(df.columns.to_list()))
+            #df.columns = pd.Index(columns)
+            df.columns = pd.Index(uniquify_columns(df.columns.to_list()))
 
             # write data models
             self.ws.data_models.write({data_model_name: df.applymap(str)},
@@ -271,18 +256,10 @@ class Bioos_workflow:
             self.logger.info("Set data model successfully.")
 
             # match the batch sytax of Bio-OS
-            """
             unupdate_dict = inputs_list[0]
             for key, _ in unupdate_dict.items():
                 unupdate_dict[key] = f'this.{key.split(".")[-1]}'
 
-            """
-
-            unupdate_dict = inputs_list[0]
-            input_cols_unique = df.columns[1:]
-
-            for orig_key, col_name in zip(unupdate_dict.keys(), input_cols_unique):
-                unupdate_dict[orig_key] = f"this.{col_name}"
 
             self.params_submit["inputs"] = json.dumps(unupdate_dict)
             self.params_submit["data_model_name"] = data_model_name

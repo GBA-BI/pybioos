@@ -865,3 +865,4 @@ class Workflow(metaclass=SingletonType):
         submission_id = Config.service().create_submission(params).get("ID")
 
         return Submission(self.workspace_id, submission_id).runs
+

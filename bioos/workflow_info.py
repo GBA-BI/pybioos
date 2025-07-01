@@ -58,7 +58,6 @@ class WorkflowInfo:
     def get_workspace_id(self, workspace_name: str) -> str:
         """
         获取工作区ID
-
         Args:
             workspace_name: 工作区名称
 
