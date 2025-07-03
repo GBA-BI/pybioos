@@ -681,7 +681,6 @@ class Workflow(metaclass=SingletonType):
         if not self._status["Phase"]:
             self.sync()
         return self._status
-
     @property
     def inputs(self) -> List[Dict[str, Any]]:
         """Get the workflow input parameters."""

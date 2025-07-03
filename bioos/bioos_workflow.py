@@ -23,7 +23,6 @@ def uniquify_columns(cols: list[str]) -> list[str]:
             out.append(f"{base}_{seen[base]}")   # fastq → fastq_1 → fastq_2
     return out
 
-
 def recognize_files_from_input_json(workflow_input_json: dict) -> dict:
     putative_files = {}
 
