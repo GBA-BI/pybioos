@@ -20,9 +20,9 @@ def status() -> Config.LoginInfo:
     return Config.login_info()
 
 
-def login(endpoint: str,
-          access_key: str,
+def login(access_key: str,
           secret_key: str,
+          endpoint: str = None,
           region: str = REGION_CN_NORTH1) -> bool:
     """Login to the given endpoint using specified account and password.
 
@@ -35,14 +35,16 @@ def login(endpoint: str,
     *Example*:
     ::
 
-        bioos.login(endpoint="https://cloud.xxxxx.xxx.cn",access_key="xxxxxxxx",secret_key="xxxxxxxx")
+        bioos.login(access_key="xxxxxxxx", secret_key="xxxxxxxx")
+        # or specify endpoint explicitly:
+        bioos.login(access_key="xxxxxxxx", secret_key="xxxxxxxx", endpoint="https://cloud.xxxxx.xxx.cn")
 
-    :param endpoint: The environment to be logged in
-    :type endpoint: str
     :param access_key: The specified account's access key
     :type access_key: str
     :param secret_key: Corresponding secret key of the access key
     :type secret_key: str
+    :param endpoint: The environment to be logged in (optional, defaults to Config._endpoint)
+    :type endpoint: str
     :param region: The region to be logged in
     :type region: str
     :return: Login result
@@ -50,7 +52,8 @@ def login(endpoint: str,
     """
     Config.set_access_key(access_key)
     Config.set_secret_key(secret_key)
-    Config.set_endpoint(endpoint)
+    if endpoint is not None:
+        Config.set_endpoint(endpoint)
     Config.set_region(region)
     return Config.login_info().login_status == "Already logged in"
 

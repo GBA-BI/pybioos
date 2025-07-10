@@ -7,6 +7,9 @@ from bioos.errors import ConfigurationError
 from bioos.log import PyLogger
 from bioos.service.BioOsService import BioOsService
 
+# 默认的 Bio-OS endpoint
+DEFAULT_ENDPOINT = "https://bio-top.miracle.ac.cn"
+
 LOGIN_STATUS = Literal['Already logged in', 'Not logged in']
 
 
@@ -14,7 +17,7 @@ class Config:
     _service: BioOsService = None
     _access_key: str = os.environ.get('VOLC_ACCESSKEY')
     _secret_key: str = os.environ.get('VOLC_SECRETKEY')
-    _endpoint: str = os.environ.get('BIOOS_ENDPOINT')
+    _endpoint: str = os.environ.get('BIOOS_ENDPOINT', DEFAULT_ENDPOINT)
     _region: str = REGION_CN_NORTH1
     Logger = PyLogger()  # 这里是把类赋给了Logger变量
 
