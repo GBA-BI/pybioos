@@ -7,7 +7,7 @@ import os
 import sys
 
 from bioos import bioos
-from bioos.config import Config
+from bioos.config import Config, DEFAULT_ENDPOINT
 
 
 def get_logger():
@@ -48,6 +48,11 @@ def get_submission_logs():
         '--output_dir',
         default='.',
         help='Local directory to save the logs (default: current directory)')
+    
+    # 可选参数
+    parser.add_argument('--endpoint',
+                        help='Bio-OS instance platform endpoint',
+                        default=DEFAULT_ENDPOINT)
 
     args = parser.parse_args()
     logger = get_logger()
@@ -56,7 +61,7 @@ def get_submission_logs():
         # 配置Bio-OS
         Config.set_access_key(args.ak)
         Config.set_secret_key(args.sk)
-        Config.set_endpoint("https://bio-top.miracle.ac.cn")
+        Config.set_endpoint(args.endpoint)
 
         # 获取workspace ID
         workspaces = bioos.list_workspaces()

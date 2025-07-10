@@ -6,7 +6,7 @@ import logging
 import sys
 
 from bioos import bioos
-from bioos.config import Config
+from bioos.config import Config, DEFAULT_ENDPOINT
 from bioos.resource.workflows import WorkflowResource
 
 
@@ -44,6 +44,11 @@ def bioos_workflow_status_check():
     parser.add_argument('--workflow_id',
                         required=True,
                         help='ID of the workflow to check')
+    
+    # 可选参数
+    parser.add_argument('--endpoint',
+                        help='Bio-OS instance platform endpoint',
+                        default=DEFAULT_ENDPOINT)
 
     args = parser.parse_args()
     logger = get_logger()
@@ -52,7 +57,7 @@ def bioos_workflow_status_check():
         # 配置Bio-OS
         Config.set_access_key(args.ak)
         Config.set_secret_key(args.sk)
-        Config.set_endpoint("https://bio-top.miracle.ac.cn")
+        Config.set_endpoint(args.endpoint)
 
         # 获取workspace ID
         workspaces = bioos.list_workspaces()

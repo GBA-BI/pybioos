@@ -10,6 +10,7 @@ import pandas as pd
 
 from bioos import bioos
 from bioos.errors import NotFoundError, ParameterError
+from bioos.config import DEFAULT_ENDPOINT
 
 def uniquify_columns(cols: list[str]) -> list[str]:
     seen, out = {}, []
@@ -323,7 +324,7 @@ def bioos_workflow():
     parser.add_argument("--endpoint",
                         type=str,
                         help="Bio-OS instance platform endpoint",
-                        default="https://bio-top.miracle.ac.cn")
+                        default=DEFAULT_ENDPOINT)
     parser.add_argument(
         "--ak",
         type=str,

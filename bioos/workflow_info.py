@@ -2,14 +2,13 @@ from typing import Dict, Any, List, Optional
 import pandas as pd
 
 from bioos import bioos
-from bioos.config import Config
+from bioos.config import Config, DEFAULT_ENDPOINT
 from bioos.errors import NotFoundError
-
 
 class WorkflowInfo:
     """Bio-OS 工作流信息查询类"""
 
-    def __init__(self, ak: str, sk: str, endpoint: str = "https://bio-top.miracle.ac.cn"):
+    def __init__(self, ak: str, sk: str, endpoint: str = DEFAULT_ENDPOINT):
         """
         初始化工作流信息查询类
 
