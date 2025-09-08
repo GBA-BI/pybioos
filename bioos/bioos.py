@@ -73,6 +73,28 @@ def list_workspaces() -> DataFrame:
     }).get("Items"))
 
 
+def create_workspace(name: str, description: str) -> dict:
+    """Creates a new workspace in the login environment.
+
+    *Example*:
+    ::
+
+        bioos.create_workspace(name="My Workspace", description="This is my new workspace")
+
+    :param name: Name of the workspace to create
+    :type name: str
+    :param description: Description of the workspace
+    :type description: str
+    :return: Creation result containing workspace information
+    :rtype: dict
+    """
+    params = {
+        "Name": name,
+        "Description": description
+    }
+    return Config.service().create_workspace(params)
+
+
 def workspace(id_: str) -> Workspace:  # 这里是workspace的入口
     """Returns the workspace for the given name .
 
@@ -82,6 +104,29 @@ def workspace(id_: str) -> Workspace:  # 这里是workspace的入口
     :rtype: Workspace
     """
     return Workspace(id_)
+
+
+def bind_cluster_to_workspace(workspace_id: str, cluster_id: str = "default") -> dict:
+    """Binds a cluster to the specified workspace.
+
+    *Example*:
+    ::
+
+        bioos.bind_cluster_to_workspace(workspace_id="ws_123", cluster_id="default")
+
+    :param workspace_id: ID of the workspace to bind to the cluster
+    :type workspace_id: str
+    :param cluster_id: ID of the cluster to bind (defaults to "default")
+    :type cluster_id: str
+    :return: Binding result
+    :rtype: dict
+    """
+    params = {
+        "ClusterID": cluster_id,
+        "Type": "workflow",
+        "ID": workspace_id
+    }
+    return Config.service().bind_cluster_to_workspace(params)
 
 
 def utility() -> UtilityResource:
