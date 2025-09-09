@@ -47,6 +47,11 @@ class BioOsService(Service):
                 'Action': 'ListWorkspaces',
                 'Version': '2021-03-04'
             }, {}, {}),
+            'CreateWorkspace':
+            ApiInfo('POST', '/', {
+                'Action': 'CreateWorkspace',
+                'Version': '2021-03-04'
+            }, {}, {}),
             'CreateDataModel':
             ApiInfo('POST', '/', {
                 'Action': 'CreateDataModel',
@@ -127,12 +132,19 @@ class BioOsService(Service):
                 'Action': 'DeleteWorkflow',
                 'Version': '2021-03-04'
             }, {}, {}),
+            'BindClusterToWorkspace':
+            ApiInfo('POST', '/', {
+                'Action': 'BindClusterToWorkspace',
+                'Version': '2021-03-04'
+            }, {}, {}),
         }
         return api_info
 
     def list_workspaces(self, params):  # 以下各方法的params需要在外部使用时构建
         return self.__request('ListWorkspaces', params)
 
+    def create_workspace(self, params):
+        return self.__request('CreateWorkspace', params)
     def create_data_model(self, params):
         return self.__request('CreateDataModel', params)
 
@@ -180,6 +192,9 @@ class BioOsService(Service):
 
     def delete_workflow(self, params):
         return self.__request("DeleteWorkflow", params)
+
+    def bind_cluster_to_workspace(self, params):
+        return self.__request("BindClusterToWorkspace", params)
 
     def __request(self, action, params):
         res = self.json(
