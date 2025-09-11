@@ -795,7 +795,8 @@ class Workflow(metaclass=SingletonType):
                call_caching: bool,
                submission_name_suffix: str = "",
                row_ids: List[str] = [],
-               data_model_name: str = '') -> List[Run]:
+               data_model_name: str = '',
+               mount_tos: bool = False) -> List[Run]:
         """Submit an existed workflow.
 
         *Example*:
@@ -846,6 +847,7 @@ class Workflow(metaclass=SingletonType):
             'Inputs': inputs,
             'ExposedOptions': {
                 "ReadFromCache": call_caching,
+                "MountTOS": mount_tos,
                 # TODO this may change in the future
                 "ExecutionRootDir": f"s3://{self.bucket}"
             },

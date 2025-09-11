@@ -121,3 +121,8 @@ class Workspace(metaclass=SingletonType):
         if not self._bucket:
             self._bucket = self.basic_info.get("s3_bucket")
         return Workflow(name, self._id, self._bucket)
+
+    def bind_cluster(self, cluster_id: str, type_: str = "workflow") -> dict:
+        """把当前 Workspace 绑定到指定集群"""
+        params = {"ClusterID": cluster_id, "Type": type_, "ID": self._id}
+        return Config.service().bind_cluster_to_workspace(params)

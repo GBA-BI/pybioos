@@ -1,7 +1,7 @@
 from pandas import DataFrame
 from volcengine.const.Const import REGION_CN_NORTH1
 
-from bioos.config import Config
+from bioos.config import Config,DEFAULT_ENDPOINT
 from bioos.resource.utility import UtilityResource
 from bioos.resource.workspaces import Workspace
 
@@ -22,7 +22,7 @@ def status() -> Config.LoginInfo:
 
 def login(access_key: str,
           secret_key: str,
-          endpoint: str = None,
+          endpoint: str = DEFAULT_ENDPOINT,
           region: str = REGION_CN_NORTH1) -> bool:
     """Login to the given endpoint using specified account and password.
 
@@ -71,6 +71,28 @@ def list_workspaces() -> DataFrame:
         "PageSize":
         0
     }).get("Items"))
+
+
+def create_workspace(name: str, description: str) -> dict:
+    """Creates a new workspace in the login environment.
+
+    *Example*:
+    ::
+
+        bioos.create_workspace(name="My Workspace", description="This is my new workspace")
+
+    :param name: Name of the workspace to create
+    :type name: str
+    :param description: Description of the workspace
+    :type description: str
+    :return: Creation result containing workspace information
+    :rtype: dict
+    """
+    params = {
+        "Name": name,
+        "Description": description
+    }
+    return Config.service().create_workspace(params)
 
 
 def workspace(id_: str) -> Workspace:  # 这里是workspace的入口

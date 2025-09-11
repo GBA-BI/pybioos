@@ -178,7 +178,8 @@ class Bioos_workflow:
                     data_model_name: str = "dm",
                     submission_desc: str = "Submit by pybioos",
                     call_caching: bool = True,
-                    force_reupload: bool = False):
+                    force_reupload: bool = False,
+                    mount_tos: bool = False):
         if not os.path.isfile(input_json_file):
             raise ParameterError('Input_json_file is not found.')
         #给每一个data_model加一个uuid，保证不重复
@@ -229,6 +230,7 @@ class Bioos_workflow:
             "outputs": "{}",
             "submission_desc": submission_desc,
             "call_caching": call_caching,
+            "mount_tos": mount_tos,
         }
 
         # if the input json is a batch or singleton submission
@@ -364,6 +366,12 @@ def bioos_workflow():
                         help="Force reupolad tos existed files.")
 
     parser.add_argument(
+        "--mount_tos",
+        action='store_true',
+        help="是否挂载tos",
+        default=False)
+
+    parser.add_argument(
         "--monitor",
         action='store_true',
         help="Moniter the status of submission run until finishment.")
@@ -394,7 +402,8 @@ def bioos_workflow():
                    data_model_name=parsed_args.data_model_name,
                    submission_desc=parsed_args.submission_desc,
                    call_caching=parsed_args.call_caching,
-                   force_reupload=parsed_args.force_reupload)
+                   force_reupload=parsed_args.force_reupload,
+                   mount_tos=parsed_args.mount_tos)
     bw.submit_workflow_bioosapi()
 
     # moniter
