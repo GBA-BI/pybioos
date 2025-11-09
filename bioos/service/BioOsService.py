@@ -137,6 +137,61 @@ class BioOsService(Service):
                 'Action': 'BindClusterToWorkspace',
                 'Version': '2021-03-04'
             }, {}, {}),
+            'ListWebappInstances':
+            ApiInfo('POST', '/', {
+                'Action': 'ListWebappInstances',
+                'Version': '2021-03-04'
+            }, {}, {}),
+            'CreateWebappInstance':
+            ApiInfo('POST', '/', {
+                'Action': 'CreateWebappInstance',
+                'Version': '2021-03-04'
+            }, {}, {}),
+            'CheckCreateWebappInstance':
+            ApiInfo('POST', '/', {
+                'Action': 'CheckCreateWebappInstance',
+                'Version': '2021-03-04'
+            }, {}, {}),
+            'DeleteWebappInstance':
+            ApiInfo('POST', '/', {
+                'Action': 'DeleteWebappInstance',
+                'Version': '2021-03-04'
+            }, {}, {}),
+            'StartWebappInstance':
+            ApiInfo('POST', '/', {
+                'Action': 'StartWebappInstance',
+                'Version': '2021-03-04'
+            }, {}, {}),
+            'StopWebappInstance':
+            ApiInfo('POST', '/', {
+                'Action': 'StopWebappInstance',
+                'Version': '2021-03-04'
+            }, {}, {}),
+            'ListWebappInstanceEvents':
+            ApiInfo('POST', '/', {
+                'Action': 'ListWebappInstanceEvents',
+                'Version': '2021-03-04'
+            }, {}, {}),
+            'CommitIESImage':
+            ApiInfo('POST', '/', {
+                'Action': 'CommitIESImage',
+                'Version': '2021-03-04'
+            }, {}, {}),
+            'ExportWorkspaceV2':
+            ApiInfo('POST', '/', {
+                'Action': 'ExportWorkspaceV2',
+                'Version': '2021-03-04'
+            }, {}, {}),
+            'ListSchemas':
+            ApiInfo('POST', '/', {
+                'Action': 'ListSchemas',
+                'Version': '2021-03-04'
+            }, {}, {}),
+            'GetExportWorkspacePreSignedURL':
+            ApiInfo('POST', '/', {
+                'Action': 'GetExportWorkspacePreSignedURL',
+                'Version': '2021-03-04'
+            }, {}, {}),
         }
         return api_info
 
@@ -195,6 +250,39 @@ class BioOsService(Service):
 
     def bind_cluster_to_workspace(self, params):
         return self.__request("BindClusterToWorkspace", params)
+
+    def list_webinstance_apps(self, params):
+        return self.__request('ListWebappInstances', params)
+
+    def create_webinstance_app(self, params):
+        return self.__request('CreateWebappInstance', params)
+
+    def check_webinstance_app(self, params):
+        return self.__request("CheckCreateWebappInstance", params)
+
+    def delete_webinstance_app(self, params):
+        return self.__request("DeleteWebappInstance", params)
+
+    def start_webinstance_app(self, params):
+        return self.__request("StartWebappInstance", params)
+
+    def stop_webinstance_app(self, params):
+        return self.__request("StopWebappInstance", params)
+
+    def list_webinstance_events(self, params):
+        return self.__request("ListWebappInstanceEvents", params)
+
+    def commit_ies_image(self, params):
+        return self.__request("CommitIESImage", params)
+
+    def export_workspace_v2(self, params):
+        return self.__request("ExportWorkspaceV2", params)
+
+    def list_schemas(self, params):
+        return self.__request("ListSchemas", params)
+
+    def get_export_workspace_presigned_url(self, params):
+        return self.__request("GetExportWorkspacePreSignedURL", params)
 
     def __request(self, action, params):
         res = self.json(

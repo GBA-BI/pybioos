@@ -24,6 +24,59 @@ def uniquify_columns(cols: list[str]) -> list[str]:
             out.append(f"{base}_{seen[base]}")   # fastq → fastq_1 → fastq_2
     return out
 
+def handle_null_values(input_dict):
+    """
+    处理输入字典中的null值，避免在通过pybioos后台传输时引发错误。
+    
+    Args:
+        input_dict: 输入的字典，可能包含null值
+        
+    Returns:
+        处理后的字典，null值已被适当处理
+    """
+    if not isinstance(input_dict, dict):
+        return input_dict
+        
+    result = {}
+    for key, value in input_dict.items():
+        if value is None:
+            
+            key_lower = key.lower()
+            
+            # 明显的文件路径或字符串相关
+            if any(keyword in key_lower for keyword in ["file", "path", "dir", "name", "str", "text", "url", "uri"]):
+                result[key] = ""
+            # 明显的数字相关
+            elif any(keyword in key_lower for keyword in ["num", "count", "size", "int", "float", "length", "depth", "width", "height"]):
+                continue
+            # 布尔值相关
+            elif any(keyword in key_lower for keyword in ["flag", "bool", "enable", "disable", "is_", "has_"]):
+                continue
+            # 数组或列表相关
+            elif any(keyword in key_lower for keyword in ["list", "array", "items", "samples"]):
+                # 对于数组，null通常表示空数组
+                result[key] = []
+            else:
+                # 默认情况下，替换为空字符串，因为这是最安全的处理方式
+                result[key] = ""
+        elif isinstance(value, dict):
+            result[key] = handle_null_values(value)
+        elif isinstance(value, list):
+            processed_list = []
+            for item in value:
+                if isinstance(item, dict):
+                    processed_list.append(handle_null_values(item))
+                elif item is None:
+                    continue
+                else:
+                    processed_list.append(item)
+            result[key] = processed_list
+        else:
+            result[key] = value
+            
+    return result
+
+
 def recognize_files_from_input_json(workflow_input_json: dict) -> dict:
     putative_files = {}
 
@@ -134,6 +187,8 @@ class Bioos_workflow:
         # 处理provision，更新inputs_list
         inputs_list_update = []
         for input_dict in inputs_list:
+            # 处理null值
+            input_dict = handle_null_values(input_dict)
             input_dict_update = self.input_provision(input_dict,
                                                      force_reupload)
             inputs_list_update.append(input_dict_update)
@@ -188,6 +243,9 @@ class Bioos_workflow:
 
         input_json = json.load(open(input_json_file))
         self.logger.info("Load json input successfully.")
+        
+        # 处理null值
+        input_json = handle_null_values(input_json)
 
         # putative files
         input_json_str = json.dumps(input_json)
