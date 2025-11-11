@@ -339,6 +339,13 @@ class Submission(metaclass=SingletonType):  # 与run class行为相同
         if not item.get("Status") in ("Running", "Pending"):
             self._finish_time = item.get("FinishTime")
 
+    def delete(self):
+        """Delete this submission from the workspace."""
+        Config.service().delete_submission({
+            "WorkspaceID": self.workspace_id,
+            "ID": self.id,
+        })
+
 
 class WorkflowResource(metaclass=SingletonType):
 
@@ -603,7 +610,7 @@ class Workflow(metaclass=SingletonType):
             "create_time": self.create_time,
             "update_time": self.update_time
         })
-        return f"WorkflowInfo:\n{info_dict}"
+        return f"Workflow:\n{info_dict}"
 
     @property
     @cached(cache=TTLCache(maxsize=100, ttl=1))
@@ -752,6 +759,81 @@ class Workflow(metaclass=SingletonType):
         self._owner_name = detail.get("OwnerName", "")
         self._graph = detail.get("Graph", "")
         self._source_type = detail.get("SourceType", "")
+
+    def get_input_template(self) -> Dict[str, str]:
+        """Return a readable template of input parameters.
+
+        Each entry maps parameter name to a human-friendly description,
+        e.g. "String (optional, default = \"abc\")" or "Int".
+        """
+        result: Dict[str, str] = {}
+        inputs = self.inputs or []
+        for item in inputs:
+            name = item.get("Name", "")
+            if not name:
+                continue
+            type_str = item.get("Type", "")
+            optional = item.get("Optional", False)
+            default = self._fmt_default(item.get("Default"))
+            if optional:
+                value = f"{type_str} (optional" + (f", default = {default})" if default is not None else ")")
+            else:
+                value = type_str
+            result[name] = value
+        return result
+
+    def get_output_types(self) -> Dict[str, str]:
+        """Return a mapping of output parameter name to its type."""
+        outputs = self.outputs or []
+        return {item.get("Name", ""): item.get("Type", "") for item in outputs if item.get("Name")}
+
+    def get_metadata(self) -> Dict[str, Any]:
+        """Return workflow metadata in a flat dictionary."""
+        return {
+            "name": self.name,
+            "description": self.description,
+            "language": self.language,
+            "source": self.source,
+            "tag": self.tag,
+            "status": self.status,
+            "owner_name": self.owner_name,
+            "create_time": self.create_time,
+            "update_time": self.update_time,
+            "main_workflow_path": self.main_workflow_path,
+            "source_type": self.source_type,
+        }
+
+    @staticmethod
+    def _fmt_default(raw: Any) -> Optional[str]:
+        """Format default values into a readable string.
+
+        - None -> None
+        - bool -> "true" / "false"
+        - int/float -> numeric string
+        - other strings -> quoted string
+        """
+        if raw is None:
+            return None
+        if isinstance(raw, bool):
+            return str(raw).lower()
+        if isinstance(raw, (int, float)):
+            return str(raw)
+        if isinstance(raw, str):
+            lo = raw.lower()
+            if lo in {"true", "false"}:
+                return lo
+            try:
+                int(raw)
+                return raw
+            except ValueError:
+                pass
+            try:
+                float(raw)
+                return raw
+            except ValueError:
+                pass
+            return f'"{raw}"'
+        return str(raw)
 
     @property
     @cached(cache=TTLCache(maxsize=100, ttl=1))
