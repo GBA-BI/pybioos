@@ -31,7 +31,7 @@ Use bw to submit a workflow run.
 $ bw -h
 usage: bw [-h] [--endpoint ENDPOINT] [--ak AK] [--sk SK] [--workspace_name WORKSPACE_NAME] [--workflow_name WORKFLOW_NAME] [--input_json INPUT_JSON]
           [--data_model_name DATA_MODEL_NAME] [--call_caching] [--submission_desc SUBMISSION_DESC] [--force_reupload] [--monitor]
-          [--monitor_interval MONITOR_INTERVAL] [--download_results]
+          [--monitor_interval MONITOR_INTERVAL] [--download_results] [--mount_tos] [--download_dir DOWNLOAD_DIR]
 
 Bio-OS instance platform workflow submitter program.
 
@@ -56,6 +56,9 @@ options:
   --monitor_interval MONITOR_INTERVAL
                         Time interval for query the status for the submission runs.
   --download_results    Download the submission run result files to local current path.
+  --mount_tos           Mount TOS during submission (default: disabled).
+  --download_dir DOWNLOAD_DIR
+                        Local directory to save downloaded results (default: current directory).
 ```
 
 Use bw_import to import a workflow to Bio-OS instance platform.
