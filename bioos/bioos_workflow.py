@@ -4,13 +4,14 @@ import logging
 import os
 import re
 import time
-from typing import Dict, Any
+from typing import Any, Dict
 
 import pandas as pd
 
 from bioos import bioos
-from bioos.errors import NotFoundError, ParameterError
 from bioos.config import DEFAULT_ENDPOINT
+from bioos.errors import NotFoundError, ParameterError
+
 
 def uniquify_columns(cols: list[str]) -> list[str]:
     seen, out = {}, []
@@ -21,60 +22,8 @@ def uniquify_columns(cols: list[str]) -> list[str]:
             out.append(base)
         else:
             seen[base] += 1
-            out.append(f"{base}_{seen[base]}")   # fastq → fastq_1 → fastq_2
+            out.append(f"{base}_{seen[base]}")  # fastq → fastq_1 → fastq_2
     return out
-
-def handle_null_values(input_dict):
-    """
-    处理输入字典中的null值，避免在通过pybioos后台传输时引发错误。
-    
-    Args:
-        input_dict: 输入的字典，可能包含null值
-        
-    Returns:
-        处理后的字典，null值已被适当处理
-    """
-    if not isinstance(input_dict, dict):
-        return input_dict
-        
-    result = {}
-    for key, value in input_dict.items():
-        if value is None:
-            
-            key_lower = key.lower()
-            
-            # 明显的文件路径或字符串相关
-            if any(keyword in key_lower for keyword in ["file", "path", "dir", "name", "str", "text", "url", "uri"]):
-                result[key] = ""
-            # 明显的数字相关
-            elif any(keyword in key_lower for keyword in ["num", "count", "size", "int", "float", "length", "depth", "width", "height"]):
-                continue
-            # 布尔值相关
-            elif any(keyword in key_lower for keyword in ["flag", "bool", "enable", "disable", "is_", "has_"]):
-                continue
-            # 数组或列表相关
-            elif any(keyword in key_lower for keyword in ["list", "array", "items", "samples"]):
-                # 对于数组，null通常表示空数组
-                result[key] = []
-            else:
-                # 默认情况下，替换为空字符串，因为这是最安全的处理方式
-                result[key] = ""
-        elif isinstance(value, dict):
-            result[key] = handle_null_values(value)
-        elif isinstance(value, list):
-            processed_list = []
-            for item in value:
-                if isinstance(item, dict):
-                    processed_list.append(handle_null_values(item))
-                elif item is None:
-                    continue
-                else:
-                    processed_list.append(item)
-            result[key] = processed_list
-        else:
-            result[key] = value
-            
-    return result
 
 
 def recognize_files_from_input_json(workflow_input_json: dict) -> dict:
@@ -243,9 +192,6 @@ class Bioos_workflow:
 
         input_json = json.load(open(input_json_file))
         self.logger.info("Load json input successfully.")
-        
-        # 处理null值
-        input_json = handle_null_values(input_json)
 
         # putative files
         input_json_str = json.dumps(input_json)
@@ -296,8 +242,14 @@ class Bioos_workflow:
         if isinstance(input_json, list):  # batch mode
             self.logger.info("Batch mode found.")
 
+            # handle NULL
+            cleaned_input_json = [{
+                key: value
+                for key, value in json_dict.items() if value is not None
+            } for json_dict in input_json]
+
             # build data model for batch mode
-            inputs_list = input_json
+            inputs_list = cleaned_input_json
             df = pd.DataFrame(inputs_list)
             id_col = f"{data_model_name}_id"
             columns = [
@@ -320,19 +272,23 @@ class Bioos_workflow:
             for key, _ in unupdate_dict.items():
                 unupdate_dict[key] = f'this.{key.split(".")[-1]}'
 
-
             self.params_submit["inputs"] = json.dumps(unupdate_dict)
             self.params_submit["data_model_name"] = data_model_name
             self.params_submit["row_ids"] = df[id_col].to_list()
 
         else:  # singleton mode
             self.logger.info("Singleton mode found.")
-            self.params_submit["inputs"] = json.dumps(input_json)
+
+            cleaned_input_json = {
+                key: value
+                for key, value in input_json.items() if value is not None
+            }
+            self.params_submit["inputs"] = json.dumps(cleaned_input_json)
 
         self.logger.info("Build params dict successfully.")
         return self.params_submit
 
-    def postprocess(self, download=False,download_dir="."):
+    def postprocess(self, download=False, download_dir="."):
         # 假设全部执行完毕
         #  对运行完成的目录进行下载
         # 证实bioos包只能对文件的list进行下载，不支持文件夹
@@ -423,11 +379,10 @@ def bioos_workflow():
                         action='store_true',
                         help="Force reupolad tos existed files.")
 
-    parser.add_argument(
-        "--mount_tos",
-        action='store_true',
-        help="是否挂载tos",
-        default=False)
+    parser.add_argument("--mount_tos",
+                        action='store_true',
+                        help="是否挂载tos",
+                        default=False)
 
     parser.add_argument(
         "--monitor",
@@ -442,11 +397,10 @@ def bioos_workflow():
         "--download_results",
         action='store_true',
         help="Download the submission run result files to local current path.")
-    parser.add_argument(
-        "--download_dir",
-        type=str,
-        default=".",
-        help="本地保存下载结果的目录（默认当前目录）")
+    parser.add_argument("--download_dir",
+                        type=str,
+                        default=".",
+                        help="本地保存下载结果的目录（默认当前目录）")
 
     parsed_args = parser.parse_args()
 
@@ -486,5 +440,6 @@ def bioos_workflow():
         print(bw.runs)
 
         bw.logger.info("Start to postprocess.")
-        bw.postprocess(download=parsed_args.download_results,download_dir = parsed_args.download_dir)
+        bw.postprocess(download=parsed_args.download_results,
+                       download_dir=parsed_args.download_dir)
         bw.logger.info("Postprocess finished.")
