@@ -74,17 +74,19 @@ def get_submission_logs():
         # 获取workspace对象
         ws = bioos.workspace(workspace_id)
 
-        # 列出所有文件
+        # 递归列出所有文件
         logger.info(f"Listing files for submission {args.submission_id}")
-        files_df = ws.files.list()
+        files_df = ws.files.list(recursive=True)
 
-        # 过滤出与submission相关的日志文件
+        # 过滤出与 submission 相关的日志文件
         log_files = []
         for file in files_df.key:
             if args.submission_id in file:
                 # 检查是否是日志文件
                 if (file.endswith('.log') or 'stderr' in file
-                        or 'stdout' in file or '/log/' in file):
+                        or 'stdout' in file or '/log/' in file
+                        or file.endswith('/log') or file.endswith('/rc')
+                        or file.endswith('/script')):
                     log_files.append(file)
 
         if not log_files:

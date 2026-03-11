@@ -119,32 +119,39 @@ def delete_entity_table_headers(table_name, headers):
     conf.service().delete_data_model_rows_and_headers(params)
 
 
-def list_workflows(search_keyword=None, page_number=1, page_size=10):
-    __set_env()
+def list_workflows(search_keyword=None, page_number=1, page_size=10, workspace_id=None):
     params = {
-        'WorkspaceID': conf.workspace_id(),
         'SortBy': 'CreateTime',
         'PageNumber': page_number,
         'PageSize': page_size
     }
+    if workspace_id:
+        params['WorkspaceID'] = workspace_id
+    else:
+        __set_env()
+        params['WorkspaceID'] = conf.workspace_id()
     if search_keyword:
         params['Filter'] = {'Keyword': search_keyword}
     return conf.service().list_workflows(params).get('Items')
 
 
-def get_workflow(workflow_name):
-    lis = list_workflows(search_keyword=workflow_name)
+def get_workflow(workflow_name, workspace_id=None):
+    lis = list_workflows(search_keyword=workflow_name, workspace_id=workspace_id)
     if not lis:
         return None
     lis = [x for x in lis if x['Name'] == workflow_name]
     if not lis:
         return None
     params = {
-        'WorkspaceID': conf.workspace_id(),
         'Filter': {
             'IDs': [lis[0].get('ID')]
         }
     }
+    if workspace_id:
+        params['WorkspaceID'] = workspace_id
+    else:
+        __set_env()
+        params['WorkspaceID'] = conf.workspace_id()
     workflows = conf.service().list_workflows(params).get('Items')
     if len(workflows) != 1:
         return None
@@ -202,16 +209,20 @@ def list_submissions(workflow_name=None,
                      status=None,
                      cluster_id=None,
                      page_number=1,
-                     page_size=10):
-    __set_env()
+                     page_size=10,
+                     workspace_id=None):
     params = {
-        'WorkspaceID': conf.workspace_id(),
         'PageNumber': page_number,
         'PageSize': page_size,
         'Filter': {}
     }
+    if workspace_id:
+        params['WorkspaceID'] = workspace_id
+    else:
+        __set_env()
+        params['WorkspaceID'] = conf.workspace_id()
     if workflow_name:
-        workflow = get_workflow(workflow_name)
+        workflow = get_workflow(workflow_name, workspace_id=workspace_id)
         if not workflow:
             raise NotFoundError('Workflow', workflow_name)
         params['Filter']['WorkflowID'] = workflow['ID']

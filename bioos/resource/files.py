@@ -145,24 +145,68 @@ class FileResource(metaclass=SingletonType):
             return [self._build_https_url(elem) for elem in sources]
         raise ParameterError("sources")
 
-    def list(self, prefix: str = '') -> DataFrame:  # 这里需要升级，支持list指定的路径，
-        """Lists all files' information .
+    def list(self, prefix: str = '', recursive: bool = False) -> DataFrame:
+        """Lists files under the specified prefix, like ``ls``.
+
+        Use ``prefix`` to navigate directories (like ``cd``), and ``recursive``
+        to list all files under the prefix instead of only immediate children.
 
         *Example*:
         ::
 
             ws = bioos.workspace("foo")
+
+            # ls /
             ws.files.list()
 
-        :return: files' information
+            # cd analysis/ && ls
+            ws.files.list(prefix="analysis/")
+
+            # list every file under a deep path
+            ws.files.list(prefix="analysis/.../execution/", recursive=True)
+
+        :param prefix: Directory path to list. Trailing slash is optional.
+        :type prefix: str
+        :param recursive: If True, list all files under the prefix recursively.
+                         If False (default), list only immediate children like ``ls``.
+        :type recursive: bool
+        :return: DataFrame with columns: key, last_modified, size, owner, s3_url, https_url.
         :rtype: DataFrame
         """
-        files = self.tos_handler.list_objects(prefix, 0)
-        return pd.DataFrame.from_records([
-            DisplayListedObject(f, self._build_s3_url(f.key),
-                                self._build_https_url(f.key)).__dict__
-            for f in files
-        ])
+        if prefix.startswith('/'):
+            prefix = prefix.lstrip('/')
+
+        prefix_dir = prefix if not prefix or prefix.endswith('/') else prefix + '/'
+        all_files = self.tos_handler.list_objects(prefix_dir, 0)
+
+        if recursive:
+            return pd.DataFrame.from_records([
+                DisplayListedObject(f, self._build_s3_url(f.key),
+                                    self._build_https_url(f.key)).__dict__
+                for f in all_files
+            ])
+
+        rows = []
+        seen = set()
+        for f in all_files:
+            relative = f.key[len(prefix_dir):]
+            if not relative:
+                continue
+            first = relative.split('/')[0]
+            if first in seen:
+                continue
+            seen.add(first)
+            if '/' in relative:
+                dir_key = prefix_dir + first + '/'
+                rows.append({'key': dir_key, 'last_modified': None, 'size': None,
+                             'owner': None, 's3_url': self._build_s3_url(dir_key),
+                             'https_url': None})
+            else:
+                rows.append(DisplayListedObject(
+                    f, self._build_s3_url(f.key), self._build_https_url(f.key)
+                ).__dict__)
+
+        return pd.DataFrame.from_records(rows)
 
     # TODO support s3 url input in the future
     def download(self, sources: Union[str, Iterable[str]], target: str,

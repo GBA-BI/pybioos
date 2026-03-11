@@ -2,6 +2,7 @@
 # coding: utf-8
 
 import argparse
+import json
 import logging
 import sys
 
@@ -49,6 +50,10 @@ def bioos_workflow_status_check():
     parser.add_argument('--endpoint',
                         help='Bio-OS instance platform endpoint',
                         default=DEFAULT_ENDPOINT)
+    parser.add_argument('--page_size',
+                        type=int,
+                        default=0,
+                        help='Page size for listing runs (0 for all, default: 0)')
 
     args = parser.parse_args()
     logger = get_logger()
@@ -68,10 +73,12 @@ def bioos_workflow_status_check():
         workspace_id = workspace_info["ID"].iloc[0]
 
         # 获取提交的运行状态
-        resp = Config.service().list_runs({
+        params = {
             "SubmissionID": args.submission_id,
-            "WorkspaceID": workspace_id
-        })
+            "WorkspaceID": workspace_id,
+            "PageSize": args.page_size
+        }
+        resp = Config.service().list_runs(params)
 
         if not resp.get("Items"):
             logger.error(f"No runs found for submission {args.submission_id}")
@@ -80,15 +87,46 @@ def bioos_workflow_status_check():
         # 打印所有运行的状态
         print(f"\nSubmission ID: {args.submission_id}")
         print("Runs Status:")
-        print("-" * 60)
-        print(f"{'Run ID':<40} {'Status':<10} {'Message'}")
-        print("-" * 60)
+        print("-" * 240)
+        print(f"{'Run ID':<40} {'Status':<12} {'Message':<120} {'Outputs'}")
+        print("-" * 240)
 
         for run in resp.get("Items"):
             run_id = run.get("ID", "N/A")
             status = run.get("Status", "Unknown")
-            message = run.get("Message", "")
-            print(f"{run_id:<40} {status:<10} {message}")
+            message = run.get("Message", "") or ""
+            outputs = run.get("Outputs", "") or ""
+            
+            # 失败时显示错误信息，成功时显示输出文件
+            if status == "Failed" and message:
+                # 失败时显示完整错误信息
+                output_str = ""
+            elif status == "Succeeded" and outputs:
+                # 解析 Outputs JSON 并提取所有文件路径，全量返回
+                try:
+                    outputs_dict = json.loads(outputs)
+                    # 提取所有输出文件路径
+                    all_files = []
+                    for key, value in outputs_dict.items():
+                        if isinstance(value, list):
+                            all_files.extend(value)
+                        elif isinstance(value, str):
+                            all_files.append(value)
+                    # 全量显示所有文件路径
+                    if all_files:
+                        output_str = ", ".join(all_files)
+                    else:
+                        output_str = outputs
+                except:
+                    output_str = outputs
+                message = "Succeeded"
+            else:
+                output_str = ""
+                # 其他状态也显示完整信息
+            
+            print(f"{run_id:<40} {status:<12} {message:<60} {output_str}")
+        
+        print("-" * 180)
 
     except Exception as e:
         logger.error(f"Error: {str(e)}")
