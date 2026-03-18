@@ -26,10 +26,10 @@ See Example_usage.ipynb
 
 
 Or use as CLI command.
-Use bw to submit a workflow run.
-```
-$ bw -h
-usage: bw [-h] [--endpoint ENDPOINT] [--ak AK] [--sk SK] [--workspace_name WORKSPACE_NAME] [--workflow_name WORKFLOW_NAME] [--input_json INPUT_JSON]
+Use `bioos_workflow_submit` to submit a workflow run.
+``` 
+$ bioos_workflow_submit -h
+usage: bioos_workflow_submit [-h] [--endpoint ENDPOINT] [--ak AK] [--sk SK] [--workspace_name WORKSPACE_NAME] [--workflow_name WORKFLOW_NAME] [--input_json INPUT_JSON]
           [--data_model_name DATA_MODEL_NAME] [--call_caching] [--submission_desc SUBMISSION_DESC] [--force_reupload] [--monitor]
           [--monitor_interval MONITOR_INTERVAL] [--download_results] [--mount_tos] [--download_dir DOWNLOAD_DIR]
 
@@ -61,10 +61,10 @@ options:
                         Local directory to save downloaded results (default: current directory).
 ```
 
-Use bw_import to import a workflow to Bio-OS instance platform.
+Use `bioos_workflow_import` to import a workflow to Bio-OS instance platform.
 ```
-$ bw_import -h
-usage: bw_import [-h] --ak AK --sk SK --workspace_name WORKSPACE_NAME --workflow_name WORKFLOW_NAME --workflow_source WORKFLOW_SOURCE [--workflow_desc WORKFLOW_DESC] [--main_path MAIN_PATH]
+$ bioos_workflow_import -h
+usage: bioos_workflow_import [-h] --ak AK --sk SK --workspace_name WORKSPACE_NAME --workflow_name WORKFLOW_NAME --workflow_source WORKFLOW_SOURCE [--workflow_desc WORKFLOW_DESC] [--main_path MAIN_PATH]
 
 This tool allows users to import workflows into a Bio-OS instance platform. It supports importing workflows from local WDL files, local directories containing WDL files, or Git repositories.
 
@@ -86,10 +86,10 @@ optional arguments:
                         Path to the main WDL workflow file. This is required when --workflow_source is a local directory. If --workflow_source is a single WDL file, this argument is optional and defaults to the path provided in --workflow_source. This is also required when --workflow_source is a Git repository URL pointing to a directory.
 ```
 
-Use bw_import_status_check to check the workflow import status.
+Use `bioos_workflow_import_status` to check the workflow import status.
 ```
-$ bw_import_status_check -h
-usage: bw_import_status_check [-h] --ak AK --sk SK --workspace_name WORKSPACE_NAME --workflow_id WORKFLOW_ID
+$ bioos_workflow_import_status -h
+usage: bioos_workflow_import_status [-h] --ak AK --sk SK --workspace_name WORKSPACE_NAME --workflow_id WORKFLOW_ID
 
 Bio-OS Workflow Import Status Check Tool
 
@@ -103,10 +103,10 @@ options:
                         ID of the workflow to check
 ```
 
-Use bw_status_check to check the status of workflow runs.
+Use `bioos_workflow_run_status` to check the status of workflow runs.
 ```
-$ bw_status_check -h
-usage: bw_status_check [-h] --ak AK --sk SK --workspace_name WORKSPACE_NAME --submission_id SUBMISSION_ID
+$ bioos_workflow_run_status -h
+usage: bioos_workflow_run_status [-h] --ak AK --sk SK --workspace_name WORKSPACE_NAME --submission_id SUBMISSION_ID
 
 Bio-OS Workflow Run Status Check Tool
 
@@ -120,10 +120,10 @@ options:
                         ID of the submission to check
 ```
 
-Use get_submission_logs to download workflow submission logs.
+Use `bioos_submission_logs` to download workflow submission logs.
 ```
-$ get_submission_logs -h
-usage: get_submission_logs [-h] --ak AK --sk SK --workspace_name WORKSPACE_NAME --submission_id SUBMISSION_ID [--output_dir OUTPUT_DIR]
+$ bioos_submission_logs -h
+usage: bioos_submission_logs [-h] --ak AK --sk SK --workspace_name WORKSPACE_NAME --submission_id SUBMISSION_ID [--output_dir OUTPUT_DIR]
 
 Bio-OS Workflow Submission Logs Download Tool
 
