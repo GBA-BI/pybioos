@@ -32,24 +32,25 @@ def build_parser(description: str, include_auth: bool = True) -> argparse.Argume
 
 
 def add_auth_arguments(parser: argparse.ArgumentParser) -> None:
+    auth_group = parser.add_argument_group("Authentication overrides (advanced)")
     add_argument(
-        parser,
+        auth_group,
         "ak",
         required=False,
-        help="Bio-OS access key. If omitted, MIRACLE_ACCESS_KEY or VOLC_ACCESSKEY is used.",
+        help="Bio-OS access key. Falls back to environment variables or ~/.bioos/config.yaml.",
     )
     add_argument(
-        parser,
+        auth_group,
         "sk",
         required=False,
-        help="Bio-OS secret key. If omitted, MIRACLE_SECRET_KEY or VOLC_SECRETKEY is used.",
+        help="Bio-OS secret key. Falls back to environment variables or ~/.bioos/config.yaml.",
     )
     add_argument(
-        parser,
+        auth_group,
         "endpoint",
         required=False,
         default=None,
-        help="Bio-OS endpoint. If omitted, BIOOS_ENDPOINT or the SDK default is used.",
+        help="Bio-OS endpoint. Falls back to BIOOS_ENDPOINT, ~/.bioos/config.yaml, or the SDK default.",
     )
 
 
@@ -70,7 +71,10 @@ def add_output_arguments(parser: argparse.ArgumentParser) -> None:
 def add_argument(parser: argparse.ArgumentParser, name: str, *args: Any, **kwargs: Any) -> None:
     cli_name = f"--{name.replace('_', '-')}"
     legacy_name = f"--{name}"
-    parser.add_argument(cli_name, legacy_name, *args, dest=name, **kwargs)
+    option_names = [cli_name]
+    if legacy_name != cli_name:
+        option_names.append(legacy_name)
+    parser.add_argument(*option_names, *args, dest=name, **kwargs)
 
 
 def add_bool_argument(
@@ -81,9 +85,11 @@ def add_bool_argument(
 ) -> None:
     cli_name = f"--{name.replace('_', '-')}"
     legacy_name = f"--{name}"
+    option_names = [cli_name]
+    if legacy_name != cli_name:
+        option_names.append(legacy_name)
     parser.add_argument(
-        cli_name,
-        legacy_name,
+        *option_names,
         dest=name,
         action="store_true",
         default=default,
@@ -92,9 +98,11 @@ def add_bool_argument(
     if default:
         negative_cli = f"--no-{name.replace('_', '-')}"
         negative_legacy = f"--no_{name}"
+        negative_option_names = [negative_cli]
+        if negative_legacy != negative_cli:
+            negative_option_names.append(negative_legacy)
         parser.add_argument(
-            negative_cli,
-            negative_legacy,
+            *negative_option_names,
             dest=name,
             action="store_false",
             help=f"Disable: {help_text}",
@@ -128,4 +136,3 @@ def run_cli(handler, args: argparse.Namespace) -> int:
     except Exception as exc:
         emit_error(exc, output=args.output)
         return 1
-

@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import re
+import sys
 import time
 from typing import Any, Dict
 
@@ -11,6 +12,7 @@ import pandas as pd
 from bioos import bioos
 from bioos.config import DEFAULT_ENDPOINT
 from bioos.errors import NotFoundError, ParameterError
+from bioos.ops.auth import login_to_bioos
 
 
 def uniquify_columns(cols: list[str]) -> list[str]:
@@ -332,9 +334,7 @@ class Bioos_workflow:
         return self.runs
 
 
-def bioos_workflow():
-
-    # argparse
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Bio-OS instance platform workflow submitter program.")
     parser.add_argument("--endpoint",
@@ -401,38 +401,36 @@ def bioos_workflow():
                         type=str,
                         default=".",
                         help="本地保存下载结果的目录（默认当前目录）")
+    return parser
 
-    parsed_args = parser.parse_args()
 
-    # login and submit
-    bioos.login(endpoint=parsed_args.endpoint,
-                access_key=parsed_args.ak,
-                secret_key=parsed_args.sk)
-    bw = Bioos_workflow(workspace_name=parsed_args.workspace_name,
-                        workflow_name=parsed_args.workflow_name)
-    bw.preprocess2(input_json_file=parsed_args.input_json,
-                   data_model_name=parsed_args.data_model_name,
-                   submission_desc=parsed_args.submission_desc,
-                   call_caching=parsed_args.call_caching,
-                   force_reupload=parsed_args.force_reupload,
-                   mount_tos=parsed_args.mount_tos)
+def handle(args) -> str:
+    login_to_bioos(
+        access_key=args.ak,
+        secret_key=args.sk,
+        endpoint=args.endpoint,
+    )
+    bw = Bioos_workflow(workspace_name=args.workspace_name,
+                        workflow_name=args.workflow_name)
+    bw.preprocess2(input_json_file=args.input_json,
+                   data_model_name=args.data_model_name,
+                   submission_desc=args.submission_desc,
+                   call_caching=args.call_caching,
+                   force_reupload=args.force_reupload,
+                   mount_tos=args.mount_tos)
     bw.submit_workflow_bioosapi()
 
-    # moniter
     def all_runs_done() -> bool:
-
         statuses = []
         for run in bw.runs:
-            statuses.append(True if run.status in ("Succeeded",
-                                                   "Failed") else False)
-
+            statuses.append(True if run.status in ("Succeeded", "Failed") else False)
         return all(statuses)
 
-    if parsed_args.monitor or parsed_args.download_results:
+    if args.monitor or args.download_results:
         while not all_runs_done():
             bw.logger.info("Monitoring submission run.")
             print(bw.runs)
-            time.sleep(parsed_args.monitor_interval)
+            time.sleep(args.monitor_interval)
             bw.monitor_workflow()
 
         time.sleep(60)
@@ -440,6 +438,30 @@ def bioos_workflow():
         print(bw.runs)
 
         bw.logger.info("Start to postprocess.")
-        bw.postprocess(download=parsed_args.download_results,
-                       download_dir=parsed_args.download_dir)
+        bw.postprocess(download=args.download_results,
+                       download_dir=args.download_dir)
         bw.logger.info("Postprocess finished.")
+
+    first_run = bw.runs[0] if bw.runs else None
+    if first_run is None:
+        return f"Workflow '{args.workflow_name}' submitted."
+
+    run_ids = ", ".join(str(getattr(run, "id", "N/A")) for run in bw.runs)
+    return (
+        f"Workflow '{args.workflow_name}' submitted successfully. "
+        f"Submission ID: {getattr(first_run, 'submission', 'N/A')}. "
+        f"Run IDs: {run_ids}."
+    )
+
+
+def bioos_workflow():
+    parser = build_parser()
+    parsed_args = parser.parse_args()
+    try:
+        message = handle(parsed_args)
+        if message:
+            print(message)
+        sys.exit(0)
+    except Exception as exc:
+        print(str(exc), file=sys.stderr)
+        sys.exit(1)
