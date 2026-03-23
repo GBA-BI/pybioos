@@ -429,8 +429,9 @@ class WebInstanceApp(metaclass=SingletonType):
         if levels is not None:
             filter_params["Level"] = levels
             
-        if filter_params:
-            params["Filter"] = filter_params
+        # The service expects Filter to exist even when no explicit filter
+        # fields are provided.
+        params["Filter"] = filter_params
 
         result = Config.service().list_webinstance_events(params)
         return result.get("Items", [])
@@ -721,8 +722,9 @@ class WebInstanceAppResource(metaclass=SingletonType):
         if levels is not None:
             filter_params["Level"] = levels
             
-        if filter_params:
-            params["Filter"] = filter_params
+        # The service expects Filter to exist even when no explicit filter
+        # fields are provided.
+        params["Filter"] = filter_params
 
         result = Config.service().list_webinstance_events(params)
         return result.get("Items", [])

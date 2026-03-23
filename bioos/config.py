@@ -15,8 +15,8 @@ LOGIN_STATUS = Literal['Already logged in', 'Not logged in']
 
 class Config:
     _service: BioOsService = None
-    _access_key: str = os.environ.get('VOLC_ACCESSKEY')
-    _secret_key: str = os.environ.get('VOLC_SECRETKEY')
+    _access_key: str = os.environ.get('MIRACLE_ACCESS_KEY')
+    _secret_key: str = os.environ.get('MIRACLE_SECRET_KEY')
     _endpoint: str = os.environ.get('BIOOS_ENDPOINT', DEFAULT_ENDPOINT)
     _region: str = REGION_CN_NORTH1
     Logger = PyLogger()  # 这里是把类赋给了Logger变量

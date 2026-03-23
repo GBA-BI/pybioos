@@ -27,10 +27,11 @@ setup(
     include_package_data=True,
     entry_points={
         'console_scripts': [
+            'bioos=bioos.cli.main:main',
             'bw=bioos.bioos_workflow:bioos_workflow',
             'bw_import=bioos.bw_import:bioos_workflow_import',
             'bw_import_status_check=bioos.bw_import_status_check:bioos_workflow_status_check',
             'bw_status_check=bioos.bw_status_check:bioos_workflow_status_check',
-            'get_submission_logs=bioos.get_submission_logs:get_submission_logs'
+            'get_submission_logs=bioos.get_submission_logs:get_submission_logs',
         ]
     })

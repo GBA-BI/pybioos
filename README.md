@@ -1,140 +1,241 @@
 # pybioos
 
-Python SDK for Bio-OS.
+Python SDK and CLI for Bio-OS.
 
 [![Documentation Status](https://readthedocs.org/projects/pybioos/badge/?version=latest)](https://pybioos.readthedocs.io/en/latest/?badge=latest)
 
-# Installation
-From PYPI.
-```
-$ pip install pybioos
-```
+## What Changed
 
-From source code.
-```
-$ git clone https://github.com/GBA-BI/pybioos.git
-$ cd pybioos
-$ python setup.py install
+`pybioos` now provides a unified root CLI:
+
+```bash
+bioos --help
 ```
 
-# Documentation
+The CLI is organized by resource groups such as `workspace`, `workflow`, `submission`, `file`, `ies`, `dockstore`, and `docker`.
 
-The full documentation is available at [https://pybioos.readthedocs.io/](https://pybioos.readthedocs.io/).
+## Installation
 
-# Example usage
-See Example_usage.ipynb
+Install from PyPI:
 
-
-Or use as CLI command.
-Use bw to submit a workflow run.
-```
-$ bw -h
-usage: bw [-h] [--endpoint ENDPOINT] [--ak AK] [--sk SK] [--workspace_name WORKSPACE_NAME] [--workflow_name WORKFLOW_NAME] [--input_json INPUT_JSON]
-          [--data_model_name DATA_MODEL_NAME] [--call_caching] [--submission_desc SUBMISSION_DESC] [--force_reupload] [--monitor]
-          [--monitor_interval MONITOR_INTERVAL] [--download_results] [--mount_tos] [--download_dir DOWNLOAD_DIR]
-
-Bio-OS instance platform workflow submitter program.
-
-options:
-  -h, --help            show this help message and exit
-  --endpoint ENDPOINT   Bio-OS instance platform endpoint
-  --ak AK               Access_key for your Bio-OS instance platform account.
-  --sk SK               Secret_key for your Bio-OS instance platform account.
-  --workspace_name WORKSPACE_NAME
-                        Target workspace name.
-  --workflow_name WORKFLOW_NAME
-                        Target workflow name.
-  --input_json INPUT_JSON
-                        The input_json file in Cromwell Womtools format.
-  --data_model_name DATA_MODEL_NAME
-                        Intended name for the generated data_model on the Bio-OS instance platform workspace page.
-  --call_caching        Call_caching for the submission run.
-  --submission_desc SUBMISSION_DESC
-                        Description for the submission run.
-  --force_reupload      Force reupolad tos existed files.
-  --monitor             Moniter the status of submission run until finishment.
-  --monitor_interval MONITOR_INTERVAL
-                        Time interval for query the status for the submission runs.
-  --download_results    Download the submission run result files to local current path.
-  --mount_tos           Mount TOS during submission (default: disabled).
-  --download_dir DOWNLOAD_DIR
-                        Local directory to save downloaded results (default: current directory).
+```bash
+pip install pybioos
 ```
 
-Use bw_import to import a workflow to Bio-OS instance platform.
-```
-$ bw_import -h
-usage: bw_import [-h] --ak AK --sk SK --workspace_name WORKSPACE_NAME --workflow_name WORKFLOW_NAME --workflow_source WORKFLOW_SOURCE [--workflow_desc WORKFLOW_DESC] [--main_path MAIN_PATH]
+Install from source:
 
-This tool allows users to import workflows into a Bio-OS instance platform. It supports importing workflows from local WDL files, local directories containing WDL files, or Git repositories.
-
-Bio-OS Workflow Import Tool
-
-optional arguments:
-  -h, --help            show this help message and exit
-  --ak AK               Access key for your Bio-OS instance platform account
-  --sk SK               Secret key for your Bio-OS instance platform account
-  --workspace_name WORKSPACE_NAME
-                        Target workspace name
-  --workflow_name WORKFLOW_NAME
-                        Name for the workflow to be imported
-  --workflow_source WORKFLOW_SOURCE
-                        Path to a local WDL file, or a local directory containing WDL file(s). It can also be a Git repository URL.
-  --workflow_desc WORKFLOW_DESC
-                        Description for the workflow
-  --main_path MAIN_PATH
-                        Path to the main WDL workflow file. This is required when --workflow_source is a local directory. If --workflow_source is a single WDL file, this argument is optional and defaults to the path provided in --workflow_source. This is also required when --workflow_source is a Git repository URL pointing to a directory.
+```bash
+git clone https://github.com/GBA-BI/pybioos.git
+cd pybioos
+pip install -e .
 ```
 
-Use bw_import_status_check to check the workflow import status.
-```
-$ bw_import_status_check -h
-usage: bw_import_status_check [-h] --ak AK --sk SK --workspace_name WORKSPACE_NAME --workflow_id WORKFLOW_ID
+After installation, verify the CLI:
 
-Bio-OS Workflow Import Status Check Tool
-
-options:
-  -h, --help            show this help message and exit
-  --ak AK              Access key for your Bio-OS instance platform account
-  --sk SK              Secret key for your Bio-OS instance platform account
-  --workspace_name WORKSPACE_NAME
-                        Target workspace name
-  --workflow_id WORKFLOW_ID
-                        ID of the workflow to check
+```bash
+bioos --help
 ```
 
-Use bw_status_check to check the status of workflow runs.
+## Authentication
+
+`pybioos` supports three authentication sources, in this order:
+
+1. CLI flags: `--ak`, `--sk`, `--endpoint`
+2. Environment variables: `MIRACLE_ACCESS_KEY`, `MIRACLE_SECRET_KEY`, `BIOOS_ENDPOINT`
+3. Local config file: `~/.bioos/config.yaml`
+
+Recommended approach:
+
+- For local interactive use, prefer `~/.bioos/config.yaml`
+- `--ak`, `--sk`, and `--endpoint` are currently kept for compatibility and automation scenarios
+- These explicit authentication flags may be deprecated in a future release, so new integrations should avoid depending on them when possible
+
+Recommended local config file:
+
+```yaml
+client:
+  MIRACLE_ACCESS_KEY: "your-access-key"
+  MIRACLE_SECRET_KEY: "your-secret-key"
+  serveraddr: "https://bio-top.miracle.ac.cn"
+  region: "cn-north-1"
 ```
-$ bw_status_check -h
-usage: bw_status_check [-h] --ak AK --sk SK --workspace_name WORKSPACE_NAME --submission_id SUBMISSION_ID
 
-Bio-OS Workflow Run Status Check Tool
+You can inspect the resolved auth status with:
 
-options:
-  -h, --help            show this help message and exit
-  --ak AK              Access key for your Bio-OS instance platform account
-  --sk SK              Secret key for your Bio-OS instance platform account
-  --workspace_name WORKSPACE_NAME
-                        Target workspace name
-  --submission_id SUBMISSION_ID
-                        ID of the submission to check
+```bash
+bioos auth status
 ```
 
-Use get_submission_logs to download workflow submission logs.
-```
-$ get_submission_logs -h
-usage: get_submission_logs [-h] --ak AK --sk SK --workspace_name WORKSPACE_NAME --submission_id SUBMISSION_ID [--output_dir OUTPUT_DIR]
+You can also print the expected config path and an example payload:
 
-Bio-OS Workflow Submission Logs Download Tool
-
-options:
-  -h, --help            show this help message and exit
-  --ak AK              Access key for your Bio-OS instance platform account
-  --sk SK              Secret key for your Bio-OS instance platform account
-  --workspace_name WORKSPACE_NAME
-                        Target workspace name
-  --submission_id SUBMISSION_ID
-                        ID of the submission to download logs
-  --output_dir OUTPUT_DIR
-                        Local directory to save the logs (default: current directory)
+```bash
+bioos config path
+bioos config example
 ```
+
+## Legacy Compatibility
+
+The following legacy commands are still available for compatibility:
+
+- `bw`
+- `bw_import`
+- `bw_import_status_check`
+- `bw_status_check`
+- `get_submission_logs`
+
+These commands are legacy compatibility entry points and may be removed in a future release.
+
+New users should use the unified `bioos` command tree instead:
+
+- `bw` -> `bioos workflow submit`
+- `bw_import` -> `bioos workflow import`
+- `bw_import_status_check` -> `bioos workflow import-status`
+- `bw_status_check` -> `bioos workflow run-status`
+- `get_submission_logs` -> `bioos submission logs`
+
+## Quick Start
+
+List workspaces:
+
+```bash
+bioos workspace list
+```
+
+Create a workspace:
+
+```bash
+bioos workspace create \
+  --workspace-name my-workspace \
+  --workspace-description "My Bio-OS workspace"
+```
+
+List workflows in a workspace:
+
+```bash
+bioos workflow list --workspace-name my-workspace
+```
+
+Generate an input template:
+
+```bash
+bioos workflow input-template \
+  --workspace-name my-workspace \
+  --workflow-name my-workflow
+```
+
+Import a workflow:
+
+```bash
+bioos workflow import \
+  --workspace-name my-workspace \
+  --workflow-name my-workflow \
+  --workflow-source ./workflow.wdl
+```
+
+Submit a workflow:
+
+```bash
+bioos workflow submit \
+  --workspace-name my-workspace \
+  --workflow-name my-workflow \
+  --input-json ./input.json
+```
+
+Check workflow run status:
+
+```bash
+bioos workflow run-status \
+  --workspace-name my-workspace \
+  --submission-id <submission-id>
+```
+
+Download submission logs:
+
+```bash
+bioos submission logs \
+  --workspace-name my-workspace \
+  --submission-id <submission-id>
+```
+
+List workspace files:
+
+```bash
+bioos file list --workspace-name my-workspace --recursive
+```
+
+## CLI Overview
+
+Top-level command groups:
+
+- `bioos auth`
+- `bioos config`
+- `bioos workspace`
+- `bioos workflow`
+- `bioos submission`
+- `bioos file`
+- `bioos ies`
+- `bioos dockstore`
+- `bioos docker`
+
+Common examples:
+
+```bash
+bioos workspace --help
+bioos workflow --help
+bioos submission --help
+```
+
+Current workflow commands:
+
+- `bioos workflow list`
+- `bioos workflow input-template`
+- `bioos workflow import`
+- `bioos workflow import-status`
+- `bioos workflow run-status`
+- `bioos workflow submit`
+- `bioos workflow validate`
+
+Current workspace commands:
+
+- `bioos workspace list`
+- `bioos workspace create`
+- `bioos workspace export`
+- `bioos workspace profile`
+- `bioos workspace dashboard-upload`
+
+## Python SDK Example
+
+```python
+from bioos import bioos
+
+bioos.login(
+    endpoint="https://bio-top.miracle.ac.cn",
+    access_key="your-access-key",
+    secret_key="your-secret-key",
+)
+
+workspaces = bioos.list_workspaces()
+print(workspaces)
+```
+
+Use a workspace object:
+
+```python
+from bioos import bioos
+
+bioos.login(
+    endpoint="https://bio-top.miracle.ac.cn",
+    access_key="your-access-key",
+    secret_key="your-secret-key",
+)
+
+workspace_id = "your-workspace-id"
+ws = bioos.Workspace(workspace_id)
+print(ws)
+```
+
+## Documentation
+
+Full documentation is available at [https://pybioos.readthedocs.io/](https://pybioos.readthedocs.io/).
+
+For notebook-style examples, see `Example_usage.ipynb`.
