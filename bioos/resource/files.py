@@ -1,4 +1,5 @@
 import datetime
+from urllib.parse import urlparse
 from typing import Iterable, List, Union
 
 import pandas as pd
@@ -208,7 +209,24 @@ class FileResource(metaclass=SingletonType):
 
         return pd.DataFrame.from_records(rows)
 
-    # TODO support s3 url input in the future
+    def _normalize_download_source(self, source: str) -> str:
+        if not isinstance(source, str):
+            raise ParameterError("sources")
+
+        if not source.startswith("s3://"):
+            return source
+
+        parsed = urlparse(source)
+        bucket = parsed.netloc
+        key = parsed.path.lstrip("/")
+        if not bucket or not key:
+            raise ValueError(f"Invalid s3 source: {source}")
+        if bucket != self.bucket:
+            raise ValueError(
+                f"S3 URL bucket mismatch: expected {self.bucket}, got {bucket}"
+            )
+        return key
+
     def download(self, sources: Union[str, Iterable[str]], target: str,
                  flatten: bool) -> bool:
         """Downloads all the specified file from internal tos bucket bound to workspace to
@@ -233,15 +251,23 @@ class FileResource(metaclass=SingletonType):
         if isinstance(sources, str):
             sources = [sources]
 
+        normalized_sources = [
+            self._normalize_download_source(source)
+            for source in sources
+        ]
+
         return len(
             self.tos_handler.download_objects(  # 增加异常控制
-                sources, target, flatten)) == 0
+                normalized_sources, target, flatten)) == 0
 
     def upload(
             self,
             sources: Union[str, Iterable[str]],
             target: str,  #这里需要增加已上传的校验，如已存在同名文件，有skip的选项
-            flatten: bool) -> bool:
+            flatten: bool,
+            checkpoint_dir: str = "",
+            max_retries: int = 3,
+            task_num: int = None) -> bool:
         """Uploads a local file or a batch of local files to internal tos bucket bound to workspace.
 
         *Example*:
@@ -262,8 +288,15 @@ class FileResource(metaclass=SingletonType):
         if isinstance(sources, str):
             sources = [sources]
 
-        return len(self.tos_handler.upload_objects(sources, target,
-                                                   flatten)) == 0
+        return len(
+            self.tos_handler.upload_objects(
+                sources,
+                target,
+                flatten,
+                checkpoint_dir=checkpoint_dir,
+                max_retries=max_retries,
+                task_num=task_num if task_num is not None else 10,
+            )) == 0
 
     def delete(self, sources: Union[str, Iterable[str]]) -> bool:
         """Deletes the given file from the tos bucket bound to workspace .

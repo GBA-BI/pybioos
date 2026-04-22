@@ -15,6 +15,7 @@ from bioos.utils.common_tools import SingletonType, dict_str
 
 
 class Workspace(metaclass=SingletonType):
+    VALID_MEMBER_ROLES = {"Visitor", "User", "Admin"}
 
     def __init__(self, id_: str):
         self._id = id_
@@ -149,6 +150,79 @@ class Workspace(metaclass=SingletonType):
         """把当前 Workspace 绑定到指定集群"""
         params = {"ClusterID": cluster_id, "Type": type_, "ID": self._id}
         return Config.service().bind_cluster_to_workspace(params)
+
+    def list_members(self,
+                     filter_: dict = None,
+                     page_number: int = None,
+                     page_size: int = None,
+                     in_workspace: bool = True,
+                     roles=None,
+                     keyword: str = None):
+        resolved_filter = {"InWorkspace": bool(in_workspace)}
+        if filter_:
+            resolved_filter.update(filter_)
+
+        normalized_roles = self._normalize_member_names(roles)
+        if normalized_roles is not None:
+            resolved_filter["Roles"] = normalized_roles
+        if keyword is not None and str(keyword).strip():
+            resolved_filter["Keyword"] = str(keyword).strip()
+
+        params = {
+            "WorkspaceID": self._id,
+            "Filter": resolved_filter,
+        }
+        if page_number is not None:
+            params["PageNumber"] = int(page_number)
+        if page_size is not None:
+            params["PageSize"] = int(page_size)
+        return Config.service().list_members(params)
+
+    def add_members(self, names=None, role: str = ""):
+        params = {
+            "WorkspaceID": self._id,
+            "Role": self._validate_member_role(role),
+        }
+        normalized_names = self._normalize_member_names(names)
+        if normalized_names is not None:
+            params["Names"] = normalized_names
+        return Config.service().add_members(params)
+
+    def delete_members(self, names=None):
+        params = {"WorkspaceID": self._id}
+        normalized_names = self._normalize_member_names(names)
+        if normalized_names is not None:
+            params["Names"] = normalized_names
+        return Config.service().delete_members(params)
+
+    def update_members(self, names, role: str):
+        normalized_names = self._normalize_member_names(names, required=True)
+        params = {
+            "WorkspaceID": self._id,
+            "Names": normalized_names,
+            "Role": self._validate_member_role(role),
+        }
+        return Config.service().update_members(params)
+
+    def _validate_member_role(self, role: str) -> str:
+        if role not in self.VALID_MEMBER_ROLES:
+            allowed_roles = ", ".join(sorted(self.VALID_MEMBER_ROLES))
+            raise ValueError(f"Invalid member role: {role}. Allowed roles: {allowed_roles}.")
+        return role
+
+    def _normalize_member_names(self, names, required: bool = False):
+        if names is None:
+            if required:
+                raise ValueError("At least one member name is required.")
+            return None
+
+        if isinstance(names, str):
+            names = [names]
+
+        normalized_names = [str(name).strip() for name in names if str(name).strip()]
+        if required and not normalized_names:
+            raise ValueError("At least one member name is required.")
+        return normalized_names or None
 
 
     def export_workspace_v2(self, 

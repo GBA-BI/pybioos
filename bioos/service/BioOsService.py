@@ -52,6 +52,61 @@ class BioOsService(Service):
                 'Action': 'CreateWorkspace',
                 'Version': '2021-03-04'
             }, {}, {}),
+            'AddMembers':
+            ApiInfo('POST', '/', {
+                'Action': 'AddMembers',
+                'Version': '2021-03-04'
+            }, {}, {}),
+            'ListMembers':
+            ApiInfo('POST', '/', {
+                'Action': 'ListMembers',
+                'Version': '2021-03-04'
+            }, {}, {}),
+            'DeleteMembers':
+            ApiInfo('POST', '/', {
+                'Action': 'DeleteMembers',
+                'Version': '2021-03-04'
+            }, {}, {}),
+            'UpdateMembers':
+            ApiInfo('POST', '/', {
+                'Action': 'UpdateMembers',
+                'Version': '2021-03-04'
+            }, {}, {}),
+            'GetAssetUsageData':
+            ApiInfo('POST', '/', {
+                'Action': 'GetAssetUsageData',
+                'Version': '2021-03-04'
+            }, {}, {}),
+            'ListAssetUsage':
+            ApiInfo('POST', '/', {
+                'Action': 'ListAssetUsage',
+                'Version': '2021-03-04'
+            }, {}, {}),
+            'GetTotalAssetUsage':
+            ApiInfo('POST', '/', {
+                'Action': 'GetTotalAssetUsage',
+                'Version': '2021-03-04'
+            }, {}, {}),
+            'GetResourceUsageData':
+            ApiInfo('POST', '/', {
+                'Action': 'GetResourceUsageData',
+                'Version': '2021-03-04'
+            }, {}, {}),
+            'ListWorkspaceResourceUsage':
+            ApiInfo('POST', '/', {
+                'Action': 'ListWorkspaceResourceUsage',
+                'Version': '2021-03-04'
+            }, {}, {}),
+            'ListUserResourceUsage':
+            ApiInfo('POST', '/', {
+                'Action': 'ListUserResourceUsage',
+                'Version': '2021-03-04'
+            }, {}, {}),
+            'GetTotalResourceUsage':
+            ApiInfo('POST', '/', {
+                'Action': 'GetTotalResourceUsage',
+                'Version': '2021-03-04'
+            }, {}, {}),
             'CreateDataModel':
             ApiInfo('POST', '/', {
                 'Action': 'CreateDataModel',
@@ -200,6 +255,40 @@ class BioOsService(Service):
 
     def create_workspace(self, params):
         return self.__request('CreateWorkspace', params)
+
+    def add_members(self, params):
+        return self.__request('AddMembers', params)
+
+    def list_members(self, params):
+        return self.__request('ListMembers', params)
+
+    def delete_members(self, params):
+        return self.__request('DeleteMembers', params)
+
+    def update_members(self, params):
+        return self.__request('UpdateMembers', params)
+
+    def get_asset_usage_data(self, params):
+        return self.__request('GetAssetUsageData', params)
+
+    def list_asset_usage(self, params):
+        return self.__request('ListAssetUsage', params)
+
+    def get_total_asset_usage(self, params):
+        return self.__request('GetTotalAssetUsage', params)
+
+    def get_resource_usage_data(self, params):
+        return self.__request('GetResourceUsageData', params)
+
+    def list_workspace_resource_usage(self, params):
+        return self.__request('ListWorkspaceResourceUsage', params)
+
+    def list_user_resource_usage(self, params):
+        return self.__request('ListUserResourceUsage', params)
+
+    def get_total_resource_usage(self, params):
+        return self.__request('GetTotalResourceUsage', params)
+
     def create_data_model(self, params):
         return self.__request('CreateDataModel', params)
 

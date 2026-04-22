@@ -1,3 +1,4 @@
+import json
 import os
 import tempfile
 import unittest
@@ -6,11 +7,13 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from bioos.cli import (
+    add_workspace_members,
     build_docker_image,
     check_build_status,
     check_ies_status,
     create_iesapp,
     create_workspace_bioos,
+    delete_workspace_members,
     delete_submission,
     download_files_from_workspace,
     export_bioos_workspace,
@@ -21,11 +24,15 @@ from bioos.cli import (
     get_workspace_profile,
     list_bioos_workspaces,
     list_files_from_workspace,
+    list_workspace_members,
     list_submissions_from_workspace,
     list_workflows_from_workspace,
     main as cli_main,
     search_dockstore,
     upload_dashboard_file,
+    upload_files_to_workspace,
+    usage_metrics,
+    update_workspace_members,
     validate_wdl,
 )
 from bioos import bioos_workflow, bw_import, bw_import_status_check, bw_status_check, get_submission_logs as submission_logs_module
@@ -116,6 +123,37 @@ class TestCliHandlers(unittest.TestCase):
             result = download_files_from_workspace.handle(args)
         ws.files.download.assert_called_once_with(sources=["a.txt", "b.txt"], target="/tmp/out", flatten=True)
         self.assertTrue(result["success"])
+
+    def test_upload_files_to_workspace_handle(self):
+        args = SimpleNamespace(
+            workspace_name="ws",
+            source=["a.txt", "b.txt"],
+            target="input_provision/",
+            flatten=True,
+            skip_existing=True,
+            checkpoint_dir="/tmp/ckpt",
+            max_retries=5,
+            task_num=8,
+            ak="ak",
+            sk="sk",
+            endpoint="ep",
+        )
+        with patch("bioos.cli.upload_files_to_workspace.upload_local_files_to_workspace", return_value={"success": True}) as mocked:
+            result = upload_files_to_workspace.handle(args)
+        self.assertEqual(result, {"success": True})
+        mocked.assert_called_once_with(
+            workspace_name="ws",
+            sources=["a.txt", "b.txt"],
+            target="input_provision/",
+            flatten=True,
+            skip_existing=True,
+            checkpoint_dir="/tmp/ckpt",
+            max_retries=5,
+            task_num=8,
+            access_key="ak",
+            secret_key="sk",
+            endpoint="ep",
+        )
 
     def test_create_iesapp_handle(self):
         args = SimpleNamespace(
@@ -216,6 +254,75 @@ class TestCliHandlers(unittest.TestCase):
             result = upload_dashboard_file.handle(args)
         self.assertEqual(result, {"success": True})
         mocked.assert_called_once()
+
+    def test_list_workspace_members_handle(self):
+        args = SimpleNamespace(
+            workspace_name="ws",
+            page_number=2,
+            page_size=50,
+            in_workspace=True,
+            role=["Admin"],
+            keyword="alice",
+        )
+        ws = MagicMock()
+        ws.list_members.return_value = [{"Name": "alice", "Role": "Admin"}]
+        with patch("bioos.cli.list_workspace_members.workspace_context_from_args", return_value=("wid", ws)):
+            result = list_workspace_members.handle(args)
+        ws.list_members.assert_called_once_with(
+            page_number=2,
+            page_size=50,
+            in_workspace=True,
+            roles=["Admin"],
+            keyword="alice",
+        )
+        self.assertEqual(result["members"], [{"Name": "alice", "Role": "Admin"}])
+
+    def test_add_workspace_members_handle(self):
+        args = SimpleNamespace(workspace_name="ws", name=["alice", "bob"], role="User")
+        ws = MagicMock()
+        ws.add_members.return_value = {"updated": 2}
+        with patch("bioos.cli.add_workspace_members.workspace_context_from_args", return_value=("wid", ws)):
+            result = add_workspace_members.handle(args)
+        ws.add_members.assert_called_once_with(names=["alice", "bob"], role="User")
+        self.assertEqual(result["result"], {"updated": 2})
+
+    def test_update_workspace_members_handle(self):
+        args = SimpleNamespace(workspace_name="ws", name=["alice"], role="Admin")
+        ws = MagicMock()
+        ws.update_members.return_value = {"updated": 1}
+        with patch("bioos.cli.update_workspace_members.workspace_context_from_args", return_value=("wid", ws)):
+            result = update_workspace_members.handle(args)
+        ws.update_members.assert_called_once_with(names=["alice"], role="Admin")
+        self.assertEqual(result["result"], {"updated": 1})
+
+    def test_delete_workspace_members_handle(self):
+        args = SimpleNamespace(workspace_name="ws", name=["alice"])
+        ws = MagicMock()
+        ws.delete_members.return_value = {"deleted": 1}
+        with patch("bioos.cli.delete_workspace_members.workspace_context_from_args", return_value=("wid", ws)):
+            result = delete_workspace_members.handle(args)
+        ws.delete_members.assert_called_once_with(names=["alice"])
+        self.assertEqual(result["result"], {"deleted": 1})
+
+    def test_usage_asset_usage_data_handle(self):
+        args = SimpleNamespace(start_time=1, end_time=2, type="WorkspaceVisit", ak="ak", sk="sk", endpoint="ep")
+        usage = MagicMock()
+        usage.get_asset_usage_data.return_value = {"Items": []}
+        with patch("bioos.cli.usage_metrics.login_with_args"), \
+                patch("bioos.bioos.usage", return_value=usage):
+            result = usage_metrics.handle_asset_usage_data(args)
+        usage.get_asset_usage_data.assert_called_once_with(1, 2, "WorkspaceVisit")
+        self.assertEqual(result["result"], {"Items": []})
+
+    def test_usage_user_resource_usage_handle(self):
+        args = SimpleNamespace(start_time=1, end_time=2, ak="ak", sk="sk", endpoint="ep")
+        usage = MagicMock()
+        usage.list_user_resource_usage.return_value = {"Items": []}
+        with patch("bioos.cli.usage_metrics.login_with_args"), \
+                patch("bioos.bioos.usage", return_value=usage):
+            result = usage_metrics.handle_user_resource_usage(args)
+        usage.list_user_resource_usage.assert_called_once_with(1, 2)
+        self.assertEqual(result["result"], {"Items": []})
 
     def test_search_dockstore_handle(self):
         args = SimpleNamespace(
@@ -392,6 +499,116 @@ class TestCliRootAndAuth(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         mocked.assert_called_once()
 
+    def test_root_workspace_member_list_dispatches_to_existing_handler(self):
+        with patch("bioos.cli.list_workspace_members.handle", return_value={"success": True}) as mocked:
+            exit_code = cli_main.main(
+                ["workspace", "member", "list", "--workspace-name", "ws", "--output", "json"]
+            )
+
+        self.assertEqual(exit_code, 0)
+        mocked.assert_called_once()
+
+    def test_root_workspace_member_add_dispatches_to_existing_handler(self):
+        with patch("bioos.cli.add_workspace_members.handle", return_value={"success": True}) as mocked:
+            exit_code = cli_main.main(
+                [
+                    "workspace",
+                    "member",
+                    "add",
+                    "--workspace-name",
+                    "ws",
+                    "--name",
+                    "alice",
+                    "--role",
+                    "User",
+                    "--output",
+                    "json",
+                ]
+            )
+
+        self.assertEqual(exit_code, 0)
+        mocked.assert_called_once()
+
+    def test_root_workspace_member_update_dispatches_to_existing_handler(self):
+        with patch("bioos.cli.update_workspace_members.handle", return_value={"success": True}) as mocked:
+            exit_code = cli_main.main(
+                [
+                    "workspace",
+                    "member",
+                    "update",
+                    "--workspace-name",
+                    "ws",
+                    "--name",
+                    "alice",
+                    "--role",
+                    "Admin",
+                    "--output",
+                    "json",
+                ]
+            )
+
+        self.assertEqual(exit_code, 0)
+        mocked.assert_called_once()
+
+    def test_root_workspace_member_delete_dispatches_to_existing_handler(self):
+        with patch("bioos.cli.delete_workspace_members.handle", return_value={"success": True}) as mocked:
+            exit_code = cli_main.main(
+                [
+                    "workspace",
+                    "member",
+                    "delete",
+                    "--workspace-name",
+                    "ws",
+                    "--name",
+                    "alice",
+                    "--output",
+                    "json",
+                ]
+            )
+
+        self.assertEqual(exit_code, 0)
+        mocked.assert_called_once()
+
+    def test_root_usage_asset_data_dispatches_to_existing_handler(self):
+        with patch("bioos.cli.usage_metrics.handle_asset_usage_data", return_value={"success": True}) as mocked:
+            exit_code = cli_main.main(
+                ["usage", "asset-data", "--start-time", "1", "--end-time", "2", "--type", "WorkspaceVisit", "--output", "json"]
+            )
+
+        self.assertEqual(exit_code, 0)
+        mocked.assert_called_once()
+
+    def test_root_usage_resource_user_list_dispatches_to_existing_handler(self):
+        with patch("bioos.cli.usage_metrics.handle_user_resource_usage", return_value={"success": True}) as mocked:
+            exit_code = cli_main.main(
+                ["usage", "resource-user-list", "--start-time", "1", "--end-time", "2", "--output", "json"]
+            )
+
+        self.assertEqual(exit_code, 0)
+        mocked.assert_called_once()
+
+    def test_root_file_upload_dispatches_to_existing_handler(self):
+        with patch("bioos.cli.upload_files_to_workspace.handle", return_value={"success": True}) as mocked:
+            exit_code = cli_main.main(
+                [
+                    "file",
+                    "upload",
+                    "--workspace-name",
+                    "ws",
+                    "--source",
+                    "a.txt",
+                    "--checkpoint-dir",
+                    "/tmp/ckpt",
+                    "--max-retries",
+                    "5",
+                    "--output",
+                    "json",
+                ]
+            )
+
+        self.assertEqual(exit_code, 0)
+        mocked.assert_called_once()
+
     def test_root_config_path_returns_success(self):
         exit_code = cli_main.main(["config", "path", "--output", "json"])
         self.assertEqual(exit_code, 0)
@@ -533,6 +750,372 @@ class TestCliRootAndAuth(unittest.TestCase):
 
         login_mock.assert_called_once()
         self.assertIn("Submission ID: sub1", result)
+
+    def test_preprocess2_uses_workspace_upload_helper(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            input_json = Path(tmpdir) / "inputs.json"
+            local_file = Path(tmpdir) / "sample.txt"
+            local_file.write_text("data", encoding="utf-8")
+            input_json.write_text(
+                '{"wf.input":"' + str(local_file) + '","wf.name":"sample"}',
+                encoding="utf-8",
+            )
+
+            class FakeSeries:
+                def __len__(self):
+                    return 1
+
+                def to_list(self):
+                    return ["wid"]
+
+            class FakeWorkspaces:
+                Name = "ws"
+                ID = FakeSeries()
+
+                def __getitem__(self, key):
+                    return self
+
+            with patch("bioos.bioos_workflow.bioos.list_workspaces") as list_mock, \
+                    patch("bioos.bioos_workflow.bioos.workspace") as workspace_mock, \
+                    patch("bioos.bioos_workflow._upload_local_files_with_workspace") as upload_mock:
+                list_mock.return_value = FakeWorkspaces()
+
+                ws = MagicMock()
+                workspace_mock.return_value = ws
+                bw = bioos_workflow.Bioos_workflow(workspace_name="ws", workflow_name="wf")
+                upload_mock.return_value = {
+                    "uploaded_files": [{
+                        "source": str(local_file),
+                        "key": "input_provision/sample.txt",
+                        "s3_url": "s3://bioos-wid/input_provision/sample.txt",
+                    }],
+                    "skipped_files": [],
+                }
+
+                result = bw.preprocess2(
+                    input_json_file=str(input_json),
+                    data_model_name="dm",
+                    submission_desc="desc",
+                    call_caching=True,
+                    force_reupload=False,
+                    mount_tos=False,
+                )
+
+        upload_mock.assert_called_once()
+        self.assertIn("s3://bioos-wid/input_provision/sample.txt", result["inputs"])
+
+    def test_dataframe_map_compat_falls_back_to_applymap(self):
+        class FakeDataFrame:
+            def __init__(self):
+                self.called = None
+
+            def applymap(self, func):
+                self.called = ("applymap", func("x"))
+                return "applymap-result"
+
+        fake_df = FakeDataFrame()
+        result = bioos_workflow.dataframe_map_compat(fake_df, str)
+        self.assertEqual(result, "applymap-result")
+        self.assertEqual(fake_df.called, ("applymap", "x"))
+
+    def test_preprocess2_replaces_chinese_local_path(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            chinese_dir = Path(tmpdir) / "广实上交模型"
+            chinese_dir.mkdir()
+            local_file = chinese_dir / "data.xlsx"
+            local_file.write_text("data", encoding="utf-8")
+            input_json = Path(tmpdir) / "inputs.json"
+            input_json.write_text(
+                json.dumps({
+                    "wf.input_excel": str(local_file),
+                    "wf.region": "north",
+                }, ensure_ascii=False),
+                encoding="utf-8",
+            )
+
+            class FakeSeries:
+                def __len__(self):
+                    return 1
+
+                def to_list(self):
+                    return ["wid"]
+
+            class FakeWorkspaces:
+                Name = "ws"
+                ID = FakeSeries()
+
+                def __getitem__(self, key):
+                    return self
+
+            with patch("bioos.bioos_workflow.bioos.list_workspaces", return_value=FakeWorkspaces()), \
+                    patch("bioos.bioos_workflow.bioos.workspace", return_value=MagicMock()), \
+                    patch("bioos.bioos_workflow._upload_local_files_with_workspace") as upload_mock:
+                upload_mock.return_value = {
+                    "uploaded_files": [{
+                        "source": str(local_file),
+                        "key": "input_provision/data.xlsx",
+                        "s3_url": "s3://bioos-wid/input_provision/data.xlsx",
+                    }],
+                    "skipped_files": [],
+                }
+                bw = bioos_workflow.Bioos_workflow(workspace_name="ws", workflow_name="wf")
+                result = bw.preprocess2(
+                    input_json_file=str(input_json),
+                    data_model_name="dm",
+                    submission_desc="desc",
+                    call_caching=True,
+                    force_reupload=False,
+                    mount_tos=False,
+                )
+
+        upload_mock.assert_called_once()
+        self.assertIn("s3://bioos-wid/input_provision/data.xlsx", result["inputs"])
+
+    def test_preprocess2_batch_replaces_multiple_local_paths(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            file_a = Path(tmpdir) / "a.txt"
+            file_b = Path(tmpdir) / "b.txt"
+            file_a.write_text("a", encoding="utf-8")
+            file_b.write_text("b", encoding="utf-8")
+            input_json = Path(tmpdir) / "inputs.json"
+            input_json.write_text(
+                json.dumps([
+                    {"wf.input": str(file_a), "wf.region": "north"},
+                    {"wf.input": str(file_b), "wf.region": "south"},
+                ], ensure_ascii=False),
+                encoding="utf-8",
+            )
+
+            class FakeSeries:
+                def __len__(self):
+                    return 1
+
+                def to_list(self):
+                    return ["wid"]
+
+            class FakeWorkspaces:
+                Name = "ws"
+                ID = FakeSeries()
+
+                def __getitem__(self, key):
+                    return self
+
+            ws = MagicMock()
+            ws.data_models.write = MagicMock()
+            with patch("bioos.bioos_workflow.bioos.list_workspaces", return_value=FakeWorkspaces()), \
+                    patch("bioos.bioos_workflow.bioos.workspace", return_value=ws), \
+                    patch("bioos.bioos_workflow._upload_local_files_with_workspace") as upload_mock:
+                upload_mock.return_value = {
+                    "uploaded_files": [
+                        {
+                            "source": str(file_a),
+                            "key": "input_provision/a.txt",
+                            "s3_url": "s3://bioos-wid/input_provision/a.txt",
+                        },
+                        {
+                            "source": str(file_b),
+                            "key": "input_provision/b.txt",
+                            "s3_url": "s3://bioos-wid/input_provision/b.txt",
+                        },
+                    ],
+                    "skipped_files": [],
+                }
+                bw = bioos_workflow.Bioos_workflow(workspace_name="ws", workflow_name="wf")
+                result = bw.preprocess2(
+                    input_json_file=str(input_json),
+                    data_model_name="batch_dm",
+                    submission_desc="desc",
+                    call_caching=True,
+                    force_reupload=False,
+                    mount_tos=False,
+                )
+
+        upload_mock.assert_called_once()
+        written_payload = ws.data_models.write.call_args.args[0]
+        written_df = written_payload["batch_dm"]
+        self.assertIn("s3://bioos-wid/input_provision/a.txt", written_df["input"].tolist())
+        self.assertIn("s3://bioos-wid/input_provision/b.txt", written_df["input"].tolist())
+        self.assertIn('"this.input"', result["inputs"])
+        self.assertEqual(result["data_model_name"], "batch_dm")
+        self.assertEqual(len(result["row_ids"]), 2)
+
+    def test_preprocess2_without_local_files_skips_upload_helper(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            input_json = Path(tmpdir) / "inputs.json"
+            input_json.write_text(
+                json.dumps({"wf.input": "drs://bucket/object", "wf.region": "north"}, ensure_ascii=False),
+                encoding="utf-8",
+            )
+
+            class FakeSeries:
+                def __len__(self):
+                    return 1
+
+                def to_list(self):
+                    return ["wid"]
+
+            class FakeWorkspaces:
+                Name = "ws"
+                ID = FakeSeries()
+
+                def __getitem__(self, key):
+                    return self
+
+            with patch("bioos.bioos_workflow.bioos.list_workspaces", return_value=FakeWorkspaces()), \
+                    patch("bioos.bioos_workflow.bioos.workspace", return_value=MagicMock()), \
+                    patch("bioos.bioos_workflow._upload_local_files_with_workspace") as upload_mock:
+                bw = bioos_workflow.Bioos_workflow(workspace_name="ws", workflow_name="wf")
+                result = bw.preprocess2(
+                    input_json_file=str(input_json),
+                    data_model_name="dm",
+                    submission_desc="desc",
+                    call_caching=True,
+                    force_reupload=False,
+                    mount_tos=False,
+                )
+
+        upload_mock.assert_not_called()
+        self.assertIn("drs://bucket/object", result["inputs"])
+
+    def test_preprocess2_force_reupload_disables_skip_existing(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            local_file = Path(tmpdir) / "sample.txt"
+            local_file.write_text("x", encoding="utf-8")
+            input_json = Path(tmpdir) / "inputs.json"
+            input_json.write_text(
+                json.dumps({"wf.input": str(local_file)}, ensure_ascii=False),
+                encoding="utf-8",
+            )
+
+            class FakeSeries:
+                def __len__(self):
+                    return 1
+
+                def to_list(self):
+                    return ["wid"]
+
+            class FakeWorkspaces:
+                Name = "ws"
+                ID = FakeSeries()
+
+                def __getitem__(self, key):
+                    return self
+
+            with patch("bioos.bioos_workflow.bioos.list_workspaces", return_value=FakeWorkspaces()), \
+                    patch("bioos.bioos_workflow.bioos.workspace", return_value=MagicMock()), \
+                    patch("bioos.bioos_workflow._upload_local_files_with_workspace") as upload_mock:
+                upload_mock.return_value = {
+                    "uploaded_files": [{
+                        "source": str(local_file),
+                        "key": "input_provision/sample.txt",
+                        "s3_url": "s3://bioos-wid/input_provision/sample.txt",
+                    }],
+                    "skipped_files": [],
+                }
+                bw = bioos_workflow.Bioos_workflow(workspace_name="ws", workflow_name="wf")
+                bw.preprocess2(
+                    input_json_file=str(input_json),
+                    data_model_name="dm",
+                    submission_desc="desc",
+                    call_caching=True,
+                    force_reupload=True,
+                    mount_tos=False,
+                )
+
+        self.assertFalse(upload_mock.call_args.kwargs["skip_existing"])
+
+    def test_collect_local_file_paths_recursively_filters_and_deduplicates(self):
+        existing_paths = {
+            "/tmp/project/广实上交模型/data.xlsx",
+            "/tmp/project/with space/report final.csv",
+            "/tmp/project/a.txt",
+        }
+        payload = {
+            "single": "/tmp/project/a.txt",
+            "nested": {
+                "batch": [
+                    "/tmp/project/广实上交模型/data.xlsx",
+                    "s3://bucket/already-uploaded.txt",
+                    "registry-vpc://image",
+                    "/tmp/project/missing.txt",
+                    {
+                        "again": "/tmp/project/a.txt",
+                        "with_space": "/tmp/project/with space/report final.csv",
+                    },
+                ]
+            },
+            "number": 123,
+            "boolean": True,
+            "none": None,
+        }
+
+        with patch("bioos.bioos_workflow.os.path.isfile", side_effect=lambda value: value in existing_paths):
+            result = bioos_workflow.collect_local_file_paths(payload)
+
+        self.assertEqual(
+            result,
+            {
+                "/tmp/project/a.txt",
+                "/tmp/project/广实上交模型/data.xlsx",
+                "/tmp/project/with space/report final.csv",
+            },
+        )
+
+    def test_collect_local_file_paths_supports_batch_input_list(self):
+        existing_paths = {
+            "/tmp/batch/a.fastq.gz",
+            "/tmp/batch/b.fastq.gz",
+        }
+        payload = [
+            {"wf.input": "/tmp/batch/a.fastq.gz", "wf.region": "north"},
+            {"wf.input": "/tmp/batch/b.fastq.gz", "wf.region": "south"},
+            {"wf.input": "drs://archive/object", "wf.region": "west"},
+        ]
+
+        with patch("bioos.bioos_workflow.os.path.isfile", side_effect=lambda value: value in existing_paths):
+            result = bioos_workflow.collect_local_file_paths(payload)
+
+        self.assertEqual(
+            result,
+            {
+                "/tmp/batch/a.fastq.gz",
+                "/tmp/batch/b.fastq.gz",
+            },
+        )
+
+    def test_replace_local_paths_with_s3_recursively_rewrites_exact_matches(self):
+        payload = {
+            "wf.input": "/tmp/project/a.txt",
+            "nested": [
+                "/tmp/project/广实上交模型/data.xlsx",
+                {
+                    "keep": "drs://archive/object",
+                    "replace": "/tmp/project/a.txt",
+                },
+            ],
+            "message": "prefix /tmp/project/a.txt should not be partially replaced inside longer text",
+        }
+        source_to_s3 = {
+            "/tmp/project/a.txt": "s3://bioos-wid/input_provision/a.txt",
+            "/tmp/project/广实上交模型/data.xlsx": "s3://bioos-wid/input_provision/data.xlsx",
+        }
+
+        result = bioos_workflow.replace_local_paths_with_s3(payload, source_to_s3)
+
+        self.assertEqual(
+            result,
+            {
+                "wf.input": "s3://bioos-wid/input_provision/a.txt",
+                "nested": [
+                    "s3://bioos-wid/input_provision/data.xlsx",
+                    {
+                        "keep": "drs://archive/object",
+                        "replace": "s3://bioos-wid/input_provision/a.txt",
+                    },
+                ],
+                "message": "prefix /tmp/project/a.txt should not be partially replaced inside longer text",
+            },
+        )
 
     def test_legacy_workflow_submit_entrypoint_exits_cleanly(self):
         parser = MagicMock()

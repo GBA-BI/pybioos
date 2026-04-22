@@ -2,6 +2,7 @@ from pandas import DataFrame
 from volcengine.const.Const import REGION_CN_NORTH1
 
 from bioos.config import Config,DEFAULT_ENDPOINT
+from bioos.resource.usage import UsageResource
 from bioos.resource.utility import UtilityResource
 from bioos.resource.workspaces import Workspace
 
@@ -113,3 +114,12 @@ def utility() -> UtilityResource:
     :rtype: UtilityResource
     """
     return UtilityResource()
+
+
+def usage() -> UsageResource:
+    """Returns the account-level usage resource object.
+
+    :return: Usage resource object
+    :rtype: UsageResource
+    """
+    return UsageResource()

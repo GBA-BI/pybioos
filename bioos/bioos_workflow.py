@@ -13,6 +13,7 @@ from bioos import bioos
 from bioos.config import DEFAULT_ENDPOINT
 from bioos.errors import NotFoundError, ParameterError
 from bioos.ops.auth import login_to_bioos
+from bioos.ops.workspace_files import _upload_local_files_with_workspace
 
 
 def uniquify_columns(cols: list[str]) -> list[str]:
@@ -46,6 +47,59 @@ def recognize_files_from_input_json(workflow_input_json: dict) -> dict:
     return putative_files
 
 
+def collect_local_file_paths(value: Any) -> set[str]:
+    paths = set()
+
+    if isinstance(value, dict):
+        for nested_value in value.values():
+            paths.update(collect_local_file_paths(nested_value))
+        return paths
+
+    if isinstance(value, list):
+        for nested_value in value:
+            paths.update(collect_local_file_paths(nested_value))
+        return paths
+
+    if not isinstance(value, str):
+        return paths
+
+    if value.startswith("s3"):
+        return paths
+
+    if "registry-vpc" in value:
+        return paths
+
+    if os.path.isfile(value):
+        paths.add(value)
+
+    return paths
+
+
+def replace_local_paths_with_s3(value: Any, source_to_s3: dict[str, str]) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: replace_local_paths_with_s3(nested_value, source_to_s3)
+            for key, nested_value in value.items()
+        }
+
+    if isinstance(value, list):
+        return [
+            replace_local_paths_with_s3(nested_value, source_to_s3)
+            for nested_value in value
+        ]
+
+    if isinstance(value, str):
+        return source_to_s3.get(value, value)
+
+    return value
+
+
+def dataframe_map_compat(df: pd.DataFrame, func):
+    # version in setup.py to 2.1+, where DataFrame.map is available.
+    if hasattr(df, "map"):
+        return df.map(func)
+    return df.applymap(func)
+
 def get_logger():
     global LOGGER
 
@@ -69,6 +123,7 @@ class Bioos_workflow:
     def __init__(self, workspace_name: str, workflow_name: str) -> None:
         # global LOGGER
         self.logger = get_logger()
+        self.workspace_name = workspace_name
 
         # get workspace id
         df = bioos.list_workspaces()
@@ -76,6 +131,7 @@ class Bioos_workflow:
         if len(ser) != 1:
             raise NotFoundError("Workspace", workspace_name)
         workspace_id = ser.to_list()[0]
+        self.workspace_id = workspace_id
 
         self.ws = bioos.workspace(workspace_id)
         self.wf = self.ws.workflow(name=workflow_name)
@@ -124,7 +180,8 @@ class Bioos_workflow:
                    submission_desc: str = "Submit by pybioos",
                    call_caching: bool = True,
                    force_reupload: bool = False):
-        input_json = json.load(open(input_json_file))
+        with open(input_json_file, encoding="utf-8") as handle:
+            input_json = json.load(handle)
         self.logger.info("Load json input successfully.")
 
         # 将单例的模式转换成向量形式
@@ -159,7 +216,10 @@ class Bioos_workflow:
 
         # 这里可能要对每次新上传的datamodel进行重命名
         # 这里经证实只支持全str类型的df
-        self.ws.data_models.write({data_model_name: df.map(str)}, force=True)
+        self.ws.data_models.write(
+            {data_model_name: dataframe_map_compat(df, str)},
+            force=True,
+        )
         self.logger.info("Set data model successfully.")
 
         # 生成veapi需要的输入结构
@@ -192,20 +252,11 @@ class Bioos_workflow:
         if data_model_name == "dm":
             data_model_name = f"dm_{int(time.time())}"
 
-        input_json = json.load(open(input_json_file))
+        with open(input_json_file, encoding="utf-8") as handle:
+            input_json = json.load(handle)
         self.logger.info("Load json input successfully.")
 
-        # putative files
-        input_json_str = json.dumps(input_json)
-
-        # capture strings containing "/" the test if the file exists
-        putative_files = [
-            s.strip('"\'') for s in re.findall(
-                r'''"[-_\w./:]+?/[-_\w./:]+?"''', input_json_str)
-            if os.path.isfile(s.strip('"\''))
-        ]
-
-        putative_files = set(putative_files)
+        putative_files = collect_local_file_paths(input_json)
         file_str = ''
         for putative_file in putative_files:
             file_str = file_str + '\t' + putative_file + '\n'
@@ -214,22 +265,27 @@ class Bioos_workflow:
             f"Putative files need to upload includes:\n{file_str}")
 
         # provision upload and file path replace
-        df = self.ws.files.list('input_provision')
-        uploaded_files = [] if df.empty else df.key.to_list()
-        for putative_file in putative_files:
-            target = f"input_provision/{os.path.basename(putative_file)}"
-
-            if not force_reupload and target in uploaded_files:
+        source_to_s3 = {}
+        if putative_files:
+            upload_result = _upload_local_files_with_workspace(
+                ws=self.ws,
+                workspace_id=self.workspace_id,
+                workspace_name=self.workspace_name,
+                sources=sorted(putative_files),
+                target="input_provision/",
+                flatten=True,
+                skip_existing=not force_reupload,
+            )
+            for uploaded_file in upload_result["uploaded_files"]:
+                self.logger.info(f"Finish upload {uploaded_file['source']}.")
+            for skipped_file in upload_result["skipped_files"]:
                 self.logger.info(
-                    f"Skip target site already existed file {putative_file}.")
-            else:
-                self.logger.info(f"Start upload {putative_file}.")
-                self.ws.files.upload(putative_file,
-                                     target="input_provision/",
-                                     flatten=True)
-                self.logger.info(f"Finish upload {putative_file}.")
-            s3_location = self.ws.files.s3_urls(target)[0]
-            input_json_str = re.sub(putative_file, s3_location, input_json_str)
+                    f"Skip target site already existed file {skipped_file['source']}.")
+            source_to_s3 = {
+                item["source"]: item["s3_url"]
+                for item in upload_result["uploaded_files"] + upload_result["skipped_files"]
+            }
+        input_json = replace_local_paths_with_s3(input_json, source_to_s3)
 
         # start build params_submit
         self.params_submit = {
@@ -240,7 +296,6 @@ class Bioos_workflow:
         }
 
         # if the input json is a batch or singleton submission
-        input_json = json.loads(input_json_str)
         if isinstance(input_json, list):  # batch mode
             self.logger.info("Batch mode found.")
 
@@ -265,7 +320,7 @@ class Bioos_workflow:
             df.columns = pd.Index(uniquify_columns(df.columns.to_list()))
 
             # write data models
-            self.ws.data_models.write({data_model_name: df.applymap(str)},
+            self.ws.data_models.write({data_model_name: dataframe_map_compat(df, str)},
                                       force=True)
             self.logger.info("Set data model successfully.")
 
