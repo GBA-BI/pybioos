@@ -4,11 +4,13 @@ from typing import Any, Iterable, Optional
 
 from bioos import bioos_workflow, bw_import, bw_import_status_check, bw_status_check, get_submission_logs
 from bioos.cli import (
+    add_workspace_members,
     build_docker_image,
     check_build_status,
     check_ies_status,
     create_iesapp,
     create_workspace_bioos,
+    delete_workspace_members,
     delete_submission,
     download_files_from_workspace,
     export_bioos_workspace,
@@ -19,10 +21,14 @@ from bioos.cli import (
     get_workspace_profile,
     list_bioos_workspaces,
     list_files_from_workspace,
+    list_workspace_members,
     list_submissions_from_workspace,
     list_workflows_from_workspace,
     search_dockstore,
     upload_dashboard_file,
+    upload_files_to_workspace,
+    usage_metrics,
+    update_workspace_members,
     validate_wdl,
 )
 from bioos.cli.common import add_argument, add_auth_arguments, add_bool_argument, add_output_arguments, run_cli
@@ -43,6 +49,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_workflow_group(subparsers)
     _add_submission_group(subparsers)
     _add_file_group(subparsers)
+    _add_usage_group(subparsers)
     _add_ies_group(subparsers)
     _add_dockstore_group(subparsers)
     _add_docker_group(subparsers)
@@ -179,6 +186,92 @@ def _add_workspace_group(subparsers: Any) -> None:
     add_argument(dashboard_parser, "local_file_path", required=True, help="Path to __dashboard__.md.")
     dashboard_parser.set_defaults(_parser=dashboard_parser)
     dashboard_parser.set_defaults(handler=upload_dashboard_file.handle)
+
+    member_parser = workspace_subparsers.add_parser("member", help="Workspace member management commands.")
+    member_subparsers = member_parser.add_subparsers(dest="member_command")
+    member_parser.set_defaults(_parser=member_parser)
+
+    member_list_parser = member_subparsers.add_parser("list", help="List workspace members.")
+    add_auth_arguments(member_list_parser)
+    add_output_arguments(member_list_parser)
+    add_argument(member_list_parser, "workspace_name", required=True, help="Workspace name.")
+    add_argument(member_list_parser, "page_number", required=False, type=int, help="Page number.")
+    add_argument(member_list_parser, "page_size", required=False, type=int, help="Page size.")
+    add_bool_argument(
+        member_list_parser,
+        "in_workspace",
+        default=True,
+        help_text="Only list users already in the workspace.",
+    )
+    add_argument(
+        member_list_parser,
+        "role",
+        required=False,
+        action="append",
+        help="Optional member role filter. Can be specified multiple times.",
+    )
+    add_argument(
+        member_list_parser,
+        "keyword",
+        required=False,
+        help="Optional username keyword filter.",
+    )
+    member_list_parser.set_defaults(_parser=member_list_parser)
+    member_list_parser.set_defaults(handler=list_workspace_members.handle)
+
+    member_add_parser = member_subparsers.add_parser("add", help="Add members to a workspace.")
+    add_auth_arguments(member_add_parser)
+    add_output_arguments(member_add_parser)
+    add_argument(member_add_parser, "workspace_name", required=True, help="Workspace name.")
+    add_argument(
+        member_add_parser,
+        "name",
+        required=False,
+        action="append",
+        help="Member username. Can be specified multiple times.",
+    )
+    add_argument(
+        member_add_parser,
+        "role",
+        required=True,
+        help="Workspace member role: Visitor, User, or Admin.",
+    )
+    member_add_parser.set_defaults(_parser=member_add_parser)
+    member_add_parser.set_defaults(handler=add_workspace_members.handle)
+
+    member_update_parser = member_subparsers.add_parser("update", help="Update workspace members.")
+    add_auth_arguments(member_update_parser)
+    add_output_arguments(member_update_parser)
+    add_argument(member_update_parser, "workspace_name", required=True, help="Workspace name.")
+    add_argument(
+        member_update_parser,
+        "name",
+        required=True,
+        action="append",
+        help="Member username. Can be specified multiple times.",
+    )
+    add_argument(
+        member_update_parser,
+        "role",
+        required=True,
+        help="Workspace member role: Visitor, User, or Admin.",
+    )
+    member_update_parser.set_defaults(_parser=member_update_parser)
+    member_update_parser.set_defaults(handler=update_workspace_members.handle)
+
+    member_delete_parser = member_subparsers.add_parser("delete", help="Delete members from a workspace.")
+    add_auth_arguments(member_delete_parser)
+    add_output_arguments(member_delete_parser)
+    add_argument(member_delete_parser, "workspace_name", required=True, help="Workspace name.")
+    add_argument(
+        member_delete_parser,
+        "name",
+        required=False,
+        action="append",
+        help="Member username. Can be specified multiple times.",
+    )
+    member_delete_parser.set_defaults(_parser=member_delete_parser)
+    member_delete_parser.set_defaults(handler=delete_workspace_members.handle)
 
 
 def _add_workflow_group(subparsers: Any) -> None:
@@ -325,6 +418,51 @@ def _add_file_group(subparsers: Any) -> None:
     file_subparsers = file_parser.add_subparsers(dest="file_command")
     file_parser.set_defaults(_parser=file_parser)
 
+    upload_parser = file_subparsers.add_parser("upload", help="Upload local files to a workspace.")
+    add_auth_arguments(upload_parser)
+    add_output_arguments(upload_parser)
+    add_argument(upload_parser, "workspace_name", required=True, help="Workspace name.")
+    add_argument(
+        upload_parser,
+        "source",
+        required=True,
+        action="append",
+        help="Local file path. Can be specified multiple times.",
+    )
+    add_argument(upload_parser, "target", required=False, default="", help="Target prefix path in the workspace bucket.")
+    add_bool_argument(upload_parser, "flatten", default=True, help_text="Flatten local paths during upload.")
+    add_bool_argument(
+        upload_parser,
+        "skip_existing",
+        default=False,
+        help_text="Skip files whose target object already exists.",
+    )
+    add_argument(
+        upload_parser,
+        "checkpoint_dir",
+        required=False,
+        default=None,
+        help="Directory for resumable upload checkpoints.",
+    )
+    add_argument(
+        upload_parser,
+        "max_retries",
+        required=False,
+        type=int,
+        default=3,
+        help="Number of retries per file after the initial attempt.",
+    )
+    add_argument(
+        upload_parser,
+        "task_num",
+        required=False,
+        type=int,
+        default=10,
+        help="Parallel task count for multipart uploads.",
+    )
+    upload_parser.set_defaults(_parser=upload_parser)
+    upload_parser.set_defaults(handler=upload_files_to_workspace.handle)
+
     list_parser = file_subparsers.add_parser("list", help="List files from a workspace.")
     add_auth_arguments(list_parser)
     add_output_arguments(list_parser)
@@ -414,6 +552,129 @@ def _add_ies_group(subparsers: Any) -> None:
     add_argument(events_parser, "ies_name", required=True, help="IES instance name.")
     events_parser.set_defaults(_parser=events_parser)
     events_parser.set_defaults(handler=get_ies_events.handle)
+
+
+def _add_usage_group(subparsers: Any) -> None:
+    usage_parser = subparsers.add_parser("usage", help="Account-level usage and asset metrics.")
+    usage_subparsers = usage_parser.add_subparsers(dest="usage_command")
+    usage_parser.set_defaults(_parser=usage_parser)
+
+    asset_data_parser = usage_subparsers.add_parser("asset-data", help="Get asset usage time-series data.")
+    add_auth_arguments(asset_data_parser)
+    add_output_arguments(asset_data_parser)
+    add_argument(asset_data_parser, "start_time", required=True, type=int, help="Start timestamp at an exact hour.")
+    add_argument(asset_data_parser, "end_time", required=True, type=int, help="End timestamp at an exact hour.")
+    add_argument(
+        asset_data_parser,
+        "type",
+        required=True,
+        help="Asset usage type: WorkspaceVisit or WorkflowUse.",
+    )
+    asset_data_parser.set_defaults(_parser=asset_data_parser)
+    asset_data_parser.set_defaults(handler=usage_metrics.handle_asset_usage_data)
+
+    asset_list_parser = usage_subparsers.add_parser("asset-list", help="List asset usage records.")
+    add_auth_arguments(asset_list_parser)
+    add_output_arguments(asset_list_parser)
+    add_argument(asset_list_parser, "start_time", required=True, type=int, help="Start timestamp at an exact hour.")
+    add_argument(asset_list_parser, "end_time", required=True, type=int, help="End timestamp at an exact hour.")
+    add_argument(
+        asset_list_parser,
+        "type",
+        required=True,
+        help="Asset usage type: WorkspaceVisit or WorkflowUse.",
+    )
+    asset_list_parser.set_defaults(_parser=asset_list_parser)
+    asset_list_parser.set_defaults(handler=usage_metrics.handle_asset_usage_list)
+
+    asset_total_parser = usage_subparsers.add_parser("asset-total", help="Get total asset usage.")
+    add_auth_arguments(asset_total_parser)
+    add_output_arguments(asset_total_parser)
+    add_argument(asset_total_parser, "start_time", required=True, type=int, help="Start timestamp at an exact hour.")
+    add_argument(asset_total_parser, "end_time", required=True, type=int, help="End timestamp at an exact hour.")
+    add_argument(
+        asset_total_parser,
+        "type",
+        required=True,
+        help="Asset usage type: WorkspaceVisit or WorkflowUse.",
+    )
+    asset_total_parser.set_defaults(_parser=asset_total_parser)
+    asset_total_parser.set_defaults(handler=usage_metrics.handle_asset_usage_total)
+
+    resource_data_parser = usage_subparsers.add_parser("resource-data", help="Get resource usage time-series data.")
+    add_auth_arguments(resource_data_parser)
+    add_output_arguments(resource_data_parser)
+    add_argument(resource_data_parser, "start_time", required=True, type=int, help="Start timestamp at an exact hour.")
+    add_argument(resource_data_parser, "end_time", required=True, type=int, help="End timestamp at an exact hour.")
+    add_argument(
+        resource_data_parser,
+        "type",
+        required=True,
+        help="Resource usage type: cpu, memory, storage, tos, or gpu.",
+    )
+    add_argument(
+        resource_data_parser,
+        "sub_dimension",
+        required=False,
+        action="append",
+        help="Optional sub-dimension. Can be specified multiple times.",
+    )
+    resource_data_parser.set_defaults(_parser=resource_data_parser)
+    resource_data_parser.set_defaults(handler=usage_metrics.handle_resource_usage_data)
+
+    resource_workspace_list_parser = usage_subparsers.add_parser(
+        "resource-workspace-list",
+        help="List workspace resource usage.",
+    )
+    add_auth_arguments(resource_workspace_list_parser)
+    add_output_arguments(resource_workspace_list_parser)
+    add_argument(
+        resource_workspace_list_parser,
+        "start_time",
+        required=True,
+        type=int,
+        help="Start timestamp at an exact hour.",
+    )
+    add_argument(
+        resource_workspace_list_parser,
+        "end_time",
+        required=True,
+        type=int,
+        help="End timestamp at an exact hour.",
+    )
+    resource_workspace_list_parser.set_defaults(_parser=resource_workspace_list_parser)
+    resource_workspace_list_parser.set_defaults(handler=usage_metrics.handle_workspace_resource_usage)
+
+    resource_user_list_parser = usage_subparsers.add_parser(
+        "resource-user-list",
+        help="List user resource usage.",
+    )
+    add_auth_arguments(resource_user_list_parser)
+    add_output_arguments(resource_user_list_parser)
+    add_argument(
+        resource_user_list_parser,
+        "start_time",
+        required=True,
+        type=int,
+        help="Start timestamp at an exact hour.",
+    )
+    add_argument(
+        resource_user_list_parser,
+        "end_time",
+        required=True,
+        type=int,
+        help="End timestamp at an exact hour.",
+    )
+    resource_user_list_parser.set_defaults(_parser=resource_user_list_parser)
+    resource_user_list_parser.set_defaults(handler=usage_metrics.handle_user_resource_usage)
+
+    resource_total_parser = usage_subparsers.add_parser("resource-total", help="Get total resource usage.")
+    add_auth_arguments(resource_total_parser)
+    add_output_arguments(resource_total_parser)
+    add_argument(resource_total_parser, "start_time", required=True, type=int, help="Start timestamp at an exact hour.")
+    add_argument(resource_total_parser, "end_time", required=True, type=int, help="End timestamp at an exact hour.")
+    resource_total_parser.set_defaults(_parser=resource_total_parser)
+    resource_total_parser.set_defaults(handler=usage_metrics.handle_total_resource_usage)
 
 
 def _add_dockstore_group(subparsers: Any) -> None:
