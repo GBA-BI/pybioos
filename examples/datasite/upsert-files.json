@@ -1,0 +1,21 @@
+{
+  "dataFiles": [
+    {
+      "name": "example_01.fastq.gz",
+      "description": "Paired-end read 1",
+      "createTime": 1778112000,
+      "updateTime": 1778112000,
+      "fileType": "FASTQ",
+      "fileSize": 123456789,
+      "accessURL": "s3://bucket/path/example_01.fastq.gz",
+      "source": "s3://bucket/path/example_01.fastq.gz",
+      "checksums": [
+        {
+          "type": "md5",
+          "value": "d41d8cd98f00b204e9800998ecf8427e"
+        }
+      ]
+    }
+  ],
+  "duplicatedReplace": true
+}

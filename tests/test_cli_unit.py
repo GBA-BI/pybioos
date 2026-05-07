@@ -2,6 +2,7 @@ import json
 import os
 import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -37,9 +38,623 @@ from bioos.cli import (
 )
 from bioos import bioos_workflow, bw_import, bw_import_status_check, bw_status_check, get_submission_logs as submission_logs_module
 from bioos.ops import auth as auth_ops
+from bioos.service.main_web import encrypt_main_web_password
 
 
 class TestCliHandlers(unittest.TestCase):
+    def test_handle_aai_import_main_web_curl(self):
+        args = SimpleNamespace(
+            curl=(
+                "curl 'https://cloud.miracle.ac.cn/api/product/bio-pipeline/graphql?CheckRepositoryAccountExist' "
+                "-H 'x-csrf-token: csrf-123456' "
+                "-H 'x-logintoken: login-token-abcdef' "
+                "-b 'tenant=abc; csrfToken=csrf-123456'"
+            ),
+            curl_file=None,
+        )
+        result = cli_main._handle_aai_import_main_web_curl(args)
+        self.assertEqual(result["web_url"], "https://cloud.miracle.ac.cn")
+        self.assertEqual(result["login_token"], "login-token-abcdef")
+        self.assertEqual(result["csrf_token"], "csrf-123456")
+        self.assertTrue(result["cookie_configured"])
+
+    def test_handle_aai_status(self):
+        args = SimpleNamespace(
+            web_url="https://cloud.miracle.ac.cn",
+            login_token="login-token",
+            csrf_token="csrf-token",
+            cookie="tenant=abc; csrfToken=csrf-token",
+        )
+        with patch("bioos.ops.auth.resolve_main_web_settings", return_value={
+            "url": "https://cloud.miracle.ac.cn",
+            "url_source": "cli",
+            "login_token_source": "cli",
+            "login_token": "login-token",
+            "csrf_token_source": "cli",
+            "csrf_token": "csrf-token",
+            "cookie_source": "cli",
+            "cookie": "tenant=abc",
+        }), \
+                patch("bioos.ops.auth.resolve_aai_settings", side_effect=[
+                    {
+                        "url": "https://network.miracle.ac.cn",
+                        "url_source": "config",
+                        "token_source": "config",
+                        "token": "repo-token",
+                        "cookie_source": "missing",
+                        "cookie": None,
+                        "passport_issued_at": "2026-05-07T00:00:00+00:00",
+                        "passport_expires_at": "2026-06-06T00:00:00+00:00",
+                        "passport_status": "valid",
+                    },
+                    {
+                        "url": "https://mclibrary.miracle.ac.cn",
+                        "url_source": "config",
+                        "token_source": "config",
+                        "token": "datasite-token",
+                        "cookie_source": "missing",
+                        "cookie": None,
+                        "passport_issued_at": "2026-05-07T00:00:00+00:00",
+                        "passport_expires_at": "2026-06-06T00:00:00+00:00",
+                        "passport_status": "valid",
+                    },
+                ]):
+            result = cli_main._handle_aai_status(args)
+        self.assertTrue(result["main_web"]["login_token_configured"])
+        self.assertTrue(result["repo"]["token_configured"])
+        self.assertTrue(result["datasite"]["token_configured"])
+        self.assertEqual(result["repo"]["passport_status"], "valid")
+
+    def test_handle_aai_sync_from_bioos_saves_repo_and_datasite(self):
+        args = SimpleNamespace(
+            web_url="https://cloud.miracle.ac.cn",
+            login_token="login-token",
+            csrf_token="csrf-token",
+            cookie="tenant=abc; csrfToken=csrf-token",
+            expires_in=3600,
+            config_path="/tmp/test-config.yaml",
+        )
+        fake_client = MagicMock()
+        fake_client.get_repository_passport.return_value = {"Passport": "passport-token"}
+        with patch("bioos.ops.auth.resolve_main_web_settings", return_value={
+            "url": "https://cloud.miracle.ac.cn",
+            "url_source": "cli",
+            "login_token_source": "cli",
+            "csrf_token_source": "cli",
+            "cookie_source": "cli",
+        }), \
+                patch("bioos.ops.auth.build_main_web_client", return_value=fake_client), \
+                patch("bioos.cli.config_store.update_section_values", side_effect=[
+                    Path("/tmp/test-config.yaml"),
+                    Path("/tmp/test-config.yaml"),
+                ]) as update_mock:
+            result = cli_main._handle_aai_sync_from_bioos(args)
+        self.assertTrue(result["synced"])
+        self.assertEqual(len(result["saved"]), 2)
+        self.assertEqual(update_mock.call_count, 2)
+        self.assertIsNotNone(result["passport_expires_at"])
+
+    def test_datasite_download_files_parser_accepts_filters(self):
+        parser = cli_main.build_parser()
+        args = parser.parse_args(
+            [
+                "datasite",
+                "dataset",
+                "download-files",
+                "--data-set-id",
+                "ds1",
+                "--target",
+                "./downloads",
+                "--name-contains",
+                "tumor",
+                "--limit",
+                "2",
+                "--dry-run",
+            ]
+        )
+        self.assertIs(args.handler, cli_main._handle_datasite_dataset_download_files)
+        self.assertEqual(args.data_set_id, "ds1")
+        self.assertTrue(args.dry_run)
+
+    def test_handle_datasite_dataset_download_files_dry_run(self):
+        args = SimpleNamespace(
+            token=None,
+            cookie=None,
+            data_set_id="ds1",
+            target="./downloads",
+            page=1,
+            size=100,
+            order_by="id:asc",
+            name_contains="tumor",
+            regex=None,
+            drs_url=None,
+            limit=1,
+            dry_run=True,
+        )
+        fake_client = MagicMock()
+        fake_client.list_dataset_files.return_value = {
+            "items": [
+                {"id": "f1", "name": "tumor.fastq.gz", "drsURL": "drs://imc-drs.miracle.ac.cn/obj1"},
+                {"id": "f2", "name": "normal.fastq.gz", "drsURL": "drs://imc-drs.miracle.ac.cn/obj2"},
+            ]
+        }
+        with patch("bioos.ops.auth.build_datasite_client", return_value=fake_client), \
+                patch("urllib.request.urlretrieve") as download_mock:
+            result = cli_main._handle_datasite_dataset_download_files(args)
+        self.assertEqual(result["matched_count"], 1)
+        self.assertEqual(result["downloaded_count"], 0)
+        self.assertTrue(result["dry_run"])
+        download_mock.assert_not_called()
+
+    def test_handle_datasite_dataset_download_files_downloads_matches(self):
+        args = SimpleNamespace(
+            token=None,
+            cookie=None,
+            data_set_id="ds1",
+            target="./downloads",
+            page=1,
+            size=100,
+            order_by="id:asc",
+            name_contains=None,
+            regex="tumor",
+            drs_url=None,
+            limit=None,
+            dry_run=False,
+        )
+        fake_client = MagicMock()
+        fake_client.list_dataset_files.return_value = {
+            "items": [
+                {"id": "f1", "name": "tumor.fastq.gz", "drsURL": "drs://imc-drs.miracle.ac.cn/obj1"},
+                {"id": "f2", "name": "normal.fastq.gz", "drsURL": "drs://imc-drs.miracle.ac.cn/obj2"},
+            ]
+        }
+        with patch("bioos.ops.auth.build_datasite_client", return_value=fake_client), \
+                patch("bioos.cli.main._resolve_drs_download_info", return_value={
+                    "object_id": "obj1",
+                    "access_url": "https://example.org/tumor.fastq.gz",
+                    "file_name": "tumor.fastq.gz",
+                }), \
+                patch("urllib.request.urlretrieve") as download_mock:
+            result = cli_main._handle_datasite_dataset_download_files(args)
+        self.assertEqual(result["matched_count"], 1)
+        self.assertEqual(result["downloaded_count"], 1)
+        self.assertEqual(result["items"][0]["name"], "tumor.fastq.gz")
+        download_mock.assert_called_once()
+
+    def test_handle_aai_sync_from_curl_extracts_and_syncs(self):
+        args = SimpleNamespace(
+            curl=(
+                "curl 'https://cloud.miracle.ac.cn/api/product/bio-pipeline/graphql?CheckRepositoryAccountExist' "
+                "-H 'x-csrf-token: csrf-123456' "
+                "-H 'x-logintoken: login-token-abcdef' "
+                "-b 'tenant=abc; csrfToken=csrf-123456'"
+            ),
+            curl_file=None,
+            expires_in=2592000,
+            config_path="/tmp/test-config.yaml",
+        )
+        with patch("bioos.cli.main._handle_aai_sync_from_bioos", return_value={
+            "synced": True,
+            "saved": [{"section": "repo"}, {"section": "datasite"}],
+        }) as sync_mock:
+            result = cli_main._handle_aai_sync_from_curl(args)
+        self.assertTrue(result["synced"])
+        self.assertTrue(result["extracted"]["cookie_configured"])
+        sync_args = sync_mock.call_args.args[0]
+        self.assertEqual(sync_args.web_url, "https://cloud.miracle.ac.cn")
+        self.assertEqual(sync_args.login_token, "login-token-abcdef")
+
+    def test_aai_login_parser_accepts_curl(self):
+        parser = cli_main.build_parser()
+        args = parser.parse_args(
+            [
+                "aai",
+                "login",
+                "--curl",
+                "curl 'https://cloud.miracle.ac.cn/api/product/bio-pipeline/graphql?CheckRepositoryAccountExist' -H 'x-csrf-token: csrf-123456' -H 'x-logintoken: login-token-abcdef' -b 'tenant=abc; csrfToken=csrf-123456'",
+            ]
+        )
+        self.assertIs(args.handler, cli_main._handle_aai_login)
+        self.assertTrue(args.save_main_web)
+        self.assertTrue(args.sync_passport)
+
+    def test_aai_login_parser_accepts_password_login(self):
+        parser = cli_main.build_parser()
+        args = parser.parse_args(
+            [
+                "aai",
+                "login",
+                "--account-name",
+                "Pretest",
+                "--password",
+                "secret-password",
+            ]
+        )
+        self.assertIs(args.handler, cli_main._handle_aai_login)
+        self.assertEqual(args.account_name, "Pretest")
+        self.assertEqual(args.password, "secret-password")
+
+    def test_encrypt_main_web_password_matches_reference(self):
+        self.assertEqual(encrypt_main_web_password("123456"), "Gx7rhCBtpV5Nd+YpsVyFZQ==")
+
+    def test_handle_aai_login_with_password_login(self):
+        args = SimpleNamespace(
+            account_name="Pretest",
+            password="secret-password",
+            user_name=None,
+            web_url="https://cloud.miracle.ac.cn",
+            login_token=None,
+            csrf_token=None,
+            cookie=None,
+            curl=None,
+            curl_file=None,
+            save_main_web=False,
+            sync_passport=True,
+            expires_in=2592000,
+            config_path="/tmp/test-config.yaml",
+        )
+        with patch("bioos.ops.auth.login_to_main_web", return_value={
+            "web_url": "https://cloud.miracle.ac.cn",
+            "login_token": "login-token-from-password",
+            "csrf_token": "csrf-token-from-password",
+            "cookie": "tenant=abc; csrfToken=csrf-token-from-password",
+            "login_result": {
+                "AccountName": "Pretest",
+                "Email": "pretest@example.com",
+                "Role": 1,
+            },
+        }), patch("bioos.cli.main._handle_aai_account_status", return_value={
+            "linked": True,
+            "result": {"Exist": True},
+        }), patch("bioos.cli.main._handle_aai_sync_from_bioos", return_value={
+            "synced": True,
+            "saved": [{"section": "repo"}, {"section": "datasite"}],
+            "passport_masked": "pass...rt",
+        }):
+            result = cli_main._handle_aai_login(args)
+        self.assertEqual(result["mode"], "password")
+        self.assertTrue(result["synced"])
+        self.assertTrue(result["main_web"]["login_token_configured"])
+        self.assertEqual(result["extracted"]["login_result"]["account_name"], "Pretest")
+
+    def test_handle_aai_login_saves_main_web_and_syncs(self):
+        args = SimpleNamespace(
+            account_name=None,
+            password=None,
+            user_name=None,
+            web_url="https://cloud.miracle.ac.cn",
+            login_token="login-token",
+            csrf_token="csrf-token",
+            cookie="tenant=abc; csrfToken=csrf-token",
+            curl=None,
+            curl_file=None,
+            save_main_web=True,
+            sync_passport=True,
+            expires_in=2592000,
+            config_path="/tmp/test-config.yaml",
+        )
+        with patch("bioos.cli.config_store.update_section_values", return_value=Path("/tmp/test-config.yaml")) as update_mock, \
+                patch("bioos.cli.main._handle_aai_account_status", return_value={
+                    "linked": True,
+                    "result": {"Exist": True},
+                }), \
+                patch("bioos.cli.main._handle_aai_sync_from_bioos", return_value={
+                    "synced": True,
+                    "saved": [{"section": "repo"}, {"section": "datasite"}],
+                    "passport_masked": "pass...port",
+                }):
+            result = cli_main._handle_aai_login(args)
+        self.assertTrue(result["synced"])
+        self.assertEqual(result["mode"], "direct")
+        self.assertEqual(result["saved"][0]["section"], "main_web")
+        update_mock.assert_called_once()
+
+    def test_handle_aai_login_from_curl_without_sync(self):
+        args = SimpleNamespace(
+            account_name=None,
+            password=None,
+            user_name=None,
+            web_url=None,
+            login_token=None,
+            csrf_token=None,
+            cookie=None,
+            curl=(
+                "curl 'https://cloud.miracle.ac.cn/api/product/bio-pipeline/graphql?CheckRepositoryAccountExist' "
+                "-H 'x-csrf-token: csrf-123456' "
+                "-H 'x-logintoken: login-token-abcdef' "
+                "-b 'tenant=abc; csrfToken=csrf-123456'"
+            ),
+            curl_file=None,
+            save_main_web=False,
+            sync_passport=False,
+            expires_in=2592000,
+            config_path="/tmp/test-config.yaml",
+        )
+        result = cli_main._handle_aai_login(args)
+        self.assertFalse(result["synced"])
+        self.assertEqual(result["mode"], "curl")
+        self.assertTrue(result["main_web"]["login_token_configured"])
+        self.assertIn("extracted", result)
+
+    def test_handle_aai_login_stops_before_passport_when_account_not_linked(self):
+        args = SimpleNamespace(
+            account_name=None,
+            password=None,
+            user_name=None,
+            web_url="https://cloud.miracle.ac.cn",
+            login_token="login-token",
+            csrf_token="csrf-token",
+            cookie="tenant=abc; csrfToken=csrf-token",
+            curl=None,
+            curl_file=None,
+            save_main_web=False,
+            sync_passport=True,
+            expires_in=2592000,
+            config_path="/tmp/test-config.yaml",
+        )
+        with patch("bioos.cli.main._handle_aai_account_status", return_value={
+            "linked": False,
+            "result": {"Exist": False},
+        }), patch("bioos.cli.main._handle_aai_sync_from_bioos") as sync_mock:
+            result = cli_main._handle_aai_login(args)
+        self.assertFalse(result["synced"])
+        self.assertFalse(result["account_link"]["linked"])
+        self.assertIn("not linked", result["message"])
+        sync_mock.assert_not_called()
+
+    def test_handle_aai_login_rejects_mixed_direct_and_curl_auth(self):
+        args = SimpleNamespace(
+            account_name=None,
+            password=None,
+            user_name=None,
+            web_url="https://cloud.miracle.ac.cn",
+            login_token=None,
+            csrf_token=None,
+            cookie=None,
+            curl="curl 'https://cloud.miracle.ac.cn/api/product/bio-pipeline/graphql?CheckRepositoryAccountExist'",
+            curl_file=None,
+            save_main_web=True,
+            sync_passport=True,
+            expires_in=2592000,
+            config_path="/tmp/test-config.yaml",
+        )
+        with self.assertRaises(ValueError):
+            cli_main._handle_aai_login(args)
+
+    def test_auth_connect_aai_parser_accepts_bioos_and_curl_inputs(self):
+        parser = cli_main.build_parser()
+        args = parser.parse_args(
+            [
+                "auth",
+                "connect-aai",
+                "--ak",
+                "ak-value",
+                "--sk",
+                "sk-value",
+                "--curl",
+                "curl 'https://cloud.miracle.ac.cn/api/product/bio-pipeline/graphql?CheckRepositoryAccountExist' -H 'x-csrf-token: csrf-123456' -H 'x-logintoken: login-token-abcdef' -b 'tenant=abc; csrfToken=csrf-123456'",
+            ]
+        )
+        self.assertIs(args.handler, cli_main._handle_auth_connect_aai)
+        self.assertEqual(args.ak, "ak-value")
+        self.assertEqual(args.sk, "sk-value")
+        self.assertTrue(args.save_client)
+        self.assertTrue(args.save_main_web)
+        self.assertTrue(args.sync_passport)
+
+    def test_auth_connect_aai_parser_accepts_password_login(self):
+        parser = cli_main.build_parser()
+        args = parser.parse_args(
+            [
+                "auth",
+                "connect-aai",
+                "--ak",
+                "ak-value",
+                "--sk",
+                "sk-value",
+                "--account-name",
+                "Pretest",
+                "--password",
+                "secret-password",
+            ]
+        )
+        self.assertIs(args.handler, cli_main._handle_auth_connect_aai)
+        self.assertEqual(args.account_name, "Pretest")
+        self.assertEqual(args.password, "secret-password")
+
+    def test_aai_refresh_parser_accepts_password_login(self):
+        parser = cli_main.build_parser()
+        args = parser.parse_args(
+            [
+                "aai",
+                "refresh",
+                "--account-name",
+                "Pretest",
+                "--password",
+                "secret-password",
+            ]
+        )
+        self.assertIs(args.handler, cli_main._handle_aai_refresh)
+        self.assertEqual(args.account_name, "Pretest")
+
+    def test_handle_aai_refresh_marks_refreshed(self):
+        args = SimpleNamespace(
+            account_name="Pretest",
+            password="secret-password",
+            user_name=None,
+            web_url=None,
+            login_token=None,
+            csrf_token=None,
+            cookie=None,
+            curl=None,
+            curl_file=None,
+            save_main_web=True,
+            expires_in=2592000,
+            config_path="/tmp/test-config.yaml",
+        )
+        with patch("bioos.cli.main._handle_aai_login", return_value={"synced": True, "saved": []}):
+            result = cli_main._handle_aai_refresh(args)
+        self.assertTrue(result["refreshed"])
+
+    def test_handle_auth_connect_aai_stops_when_bioos_auth_fails(self):
+        args = SimpleNamespace(
+            ak="ak-value",
+            sk="sk-value",
+            endpoint="https://bio-top.miracle.ac.cn",
+            account_name=None,
+            password=None,
+            user_name=None,
+            web_url=None,
+            login_token=None,
+            csrf_token=None,
+            cookie=None,
+            curl=None,
+            curl_file=None,
+            save_client=True,
+            save_main_web=True,
+            sync_passport=True,
+            expires_in=2592000,
+            config_path="/tmp/test-config.yaml",
+        )
+        with patch("bioos.cli.main.resolve_auth_settings", return_value={
+            "access_key": "ak-value",
+            "secret_key": "sk-value",
+            "endpoint": "https://bio-top.miracle.ac.cn",
+            "region": None,
+        }), \
+                patch("bioos.cli.config_store.update_section_values", return_value=Path("/tmp/test-config.yaml")) as update_mock, \
+                patch("bioos.cli.main._handle_auth_status", return_value={
+                    "success": False,
+                    "error": "bad credentials",
+                }), \
+                patch("bioos.cli.main._handle_aai_login") as aai_login_mock:
+            result = cli_main._handle_auth_connect_aai(args)
+        self.assertFalse(result["synced"])
+        self.assertEqual(result["saved"][0]["section"], "client")
+        update_mock.assert_called_once()
+        aai_login_mock.assert_not_called()
+
+    def test_handle_auth_connect_aai_runs_auth_then_aai_login(self):
+        args = SimpleNamespace(
+            ak="ak-value",
+            sk="sk-value",
+            endpoint="https://bio-top.miracle.ac.cn",
+            account_name=None,
+            password=None,
+            user_name=None,
+            web_url=None,
+            login_token=None,
+            csrf_token=None,
+            cookie=None,
+            curl="curl 'https://cloud.miracle.ac.cn/api/product/bio-pipeline/graphql?CheckRepositoryAccountExist' -H 'x-csrf-token: csrf-123456' -H 'x-logintoken: login-token-abcdef' -b 'tenant=abc; csrfToken=csrf-123456'",
+            curl_file=None,
+            save_client=True,
+            save_main_web=True,
+            sync_passport=True,
+            expires_in=2592000,
+            config_path="/tmp/test-config.yaml",
+        )
+        with patch("bioos.cli.main.resolve_auth_settings", return_value={
+            "access_key": "ak-value",
+            "secret_key": "sk-value",
+            "endpoint": "https://bio-top.miracle.ac.cn",
+            "region": None,
+        }), \
+                patch("bioos.cli.config_store.update_section_values", return_value=Path("/tmp/test-config.yaml")), \
+                patch("bioos.cli.main._handle_auth_status", return_value={
+                    "success": True,
+                    "login_status": "Logged in",
+                }), \
+                patch("bioos.cli.main._handle_aai_login", return_value={
+                    "synced": True,
+                    "saved": [{"section": "main_web"}, {"section": "repo"}, {"section": "datasite"}],
+                }) as aai_login_mock:
+            result = cli_main._handle_auth_connect_aai(args)
+        self.assertTrue(result["synced"])
+        self.assertEqual(result["saved"][0]["section"], "client")
+        self.assertEqual(result["saved"][1]["section"], "main_web")
+        aai_login_mock.assert_called_once()
+
+    def test_build_repository_client_rejects_expired_config_passport(self):
+        expired = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+        with patch("bioos.ops.auth.load_repo_config", return_value={
+            "url": "https://network.miracle.ac.cn",
+            "token": "repo-token",
+            "passport_expires_at": expired,
+        }):
+            with self.assertRaises(ValueError) as exc:
+                auth_ops.build_repository_client()
+        self.assertIn("expired", str(exc.exception))
+        self.assertIn("bioos aai refresh", str(exc.exception))
+
+    def test_build_repository_client_allows_explicit_token_even_if_config_expired(self):
+        expired = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+        with patch("bioos.ops.auth.load_repo_config", return_value={
+            "url": "https://network.miracle.ac.cn",
+            "token": "repo-token",
+            "passport_expires_at": expired,
+        }):
+            client = auth_ops.build_repository_client(token="explicit-token")
+        self.assertEqual(client.token, "explicit-token")
+
+    def test_datasite_dataset_create_accepts_cookie(self):
+        parser = cli_main.build_parser()
+        args = parser.parse_args(
+            [
+                "datasite",
+                "dataset",
+                "create",
+                "--json",
+                '{"name":"demo"}',
+                "--token",
+                "passport-token",
+                "--cookie",
+                "ory_kratos_session=session-value",
+            ]
+        )
+        self.assertEqual(args.token, "passport-token")
+        self.assertEqual(args.cookie, "ory_kratos_session=session-value")
+        self.assertIs(args.handler, cli_main._handle_datasite_dataset_create)
+
+    def test_datasite_dataset_check_create_accepts_cookie(self):
+        parser = cli_main.build_parser()
+        args = parser.parse_args(
+            [
+                "datasite",
+                "dataset",
+                "check-create",
+                "--name",
+                "demo-dataset",
+                "--cookie",
+                "ory_kratos_session=session-value",
+            ]
+        )
+        self.assertEqual(args.name, "demo-dataset")
+        self.assertEqual(args.cookie, "ory_kratos_session=session-value")
+        self.assertIs(args.handler, cli_main._handle_datasite_dataset_check)
+
+    def test_handle_datasite_dataset_template_create(self):
+        args = SimpleNamespace(kind="create")
+        result = cli_main._handle_datasite_dataset_template(args)
+        self.assertEqual(result["kind"], "create")
+        self.assertIn("template", result)
+        self.assertEqual(result["template"]["name"], "mc-dataset-demo")
+
+    def test_handle_datasite_dataset_template_invalid_kind(self):
+        args = SimpleNamespace(kind="unknown-template")
+        with self.assertRaises(ValueError):
+            cli_main._handle_datasite_dataset_template(args)
+
+    def test_handle_datasite_dataset_template_upsert_files(self):
+        args = SimpleNamespace(kind="upsert-files")
+        result = cli_main._handle_datasite_dataset_template(args)
+        self.assertEqual(result["kind"], "upsert-files")
+        template = result["template"]
+        self.assertTrue(template["duplicatedReplace"])
+        self.assertIn("dataFiles", template)
+        self.assertEqual(template["dataFiles"][0]["fileType"], "FASTQ")
+        self.assertIn("accessURL", template["dataFiles"][0])
+
     def test_list_bioos_workspaces_handle(self):
         args = SimpleNamespace(page_size=1, ak="ak", sk="sk", endpoint="ep")
         fake_df = MagicMock()

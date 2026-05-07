@@ -1,0 +1,6 @@
+{
+  "type": "DataSetCreate",
+  "dataSetID": "replace-with-created-data-set-id",
+  "title": "Publish mc-dataset-demo to data site",
+  "reason": "Initial release from pybioos workflow."
+}

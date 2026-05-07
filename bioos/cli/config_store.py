@@ -10,6 +10,21 @@ EXAMPLE_CONFIG = """client:
   MIRACLE_SECRET_KEY: "SKxxxx"
   serveraddr: "https://bio-top.miracle.ac.cn"
   region: "cn-north-1"
+main_web:
+  url: "https://cloud.miracle.ac.cn"
+  login_token: "main site X-LoginToken"
+  csrf_token: "main site csrfToken cookie value"
+  cookie: "csrfToken=...; tenant=...; other web cookies"
+repo:
+  url: "https://network.miracle.ac.cn"
+  token: "AAI token or session token"
+  cookie: "ory_kratos_session=..."
+datasite:
+  url: "https://mclibrary.miracle.ac.cn"
+  token: "AAI token or session token"
+  cookie: "ory_kratos_session=..."
+account:
+  link_mode: "aai"
 """
 
 
@@ -29,11 +44,60 @@ def load_config(path: Optional[str] = None) -> Dict[str, Any]:
     return _load_yaml_like(config_path.read_text(encoding="utf-8"))
 
 
+def save_config(config: Dict[str, Any], path: Optional[str] = None) -> Path:
+    config_path = get_config_path(path)
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(_dump_yaml_like(config), encoding="utf-8")
+    return config_path
+
+
+def update_section_values(section: str, values: Dict[str, Any], path: Optional[str] = None) -> Path:
+    config = load_config(path)
+    existing = config.get(section)
+    if not isinstance(existing, dict):
+        existing = {}
+    existing.update(values)
+    config[section] = existing
+    return save_config(config, path=path)
+
+
 def load_client_config(path: Optional[str] = None) -> Dict[str, Any]:
     config = load_config(path)
     client = config.get("client")
     if isinstance(client, dict):
         return client
+    return {}
+
+
+def load_main_web_config(path: Optional[str] = None) -> Dict[str, Any]:
+    config = load_config(path)
+    main_web = config.get("main_web")
+    if isinstance(main_web, dict):
+        return main_web
+    return {}
+
+
+def load_repo_config(path: Optional[str] = None) -> Dict[str, Any]:
+    config = load_config(path)
+    repo = config.get("repo")
+    if isinstance(repo, dict):
+        return repo
+    return {}
+
+
+def load_datasite_config(path: Optional[str] = None) -> Dict[str, Any]:
+    config = load_config(path)
+    datasite = config.get("datasite")
+    if isinstance(datasite, dict):
+        return datasite
+    return {}
+
+
+def load_account_config(path: Optional[str] = None) -> Dict[str, Any]:
+    config = load_config(path)
+    account = config.get("account")
+    if isinstance(account, dict):
+        return account
     return {}
 
 
@@ -85,3 +149,25 @@ def _parse_scalar(value: str) -> Any:
     if lowered == "false":
         return False
     return value
+
+
+def _dump_yaml_like(data: Dict[str, Any]) -> str:
+    lines = []
+    for key, value in data.items():
+        if isinstance(value, dict):
+            lines.append(f"{key}:")
+            for sub_key, sub_value in value.items():
+                lines.append(f"  {sub_key}: {_format_scalar(sub_value)}")
+        else:
+            lines.append(f"{key}: {_format_scalar(value)}")
+    return "\n".join(lines) + "\n"
+
+
+def _format_scalar(value: Any) -> str:
+    if value is None:
+        return '""'
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    text = str(value)
+    escaped = text.replace('"', '\\"')
+    return f'"{escaped}"'

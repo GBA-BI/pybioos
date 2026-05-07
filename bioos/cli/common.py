@@ -3,7 +3,7 @@ import json
 import sys
 from datetime import date, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict
 
 
 def _json_default(value: Any) -> Any:
@@ -68,6 +68,21 @@ def add_output_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def add_json_input_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--json",
+        dest="json_input",
+        default=None,
+        help="Inline JSON request body.",
+    )
+    parser.add_argument(
+        "--json-file",
+        dest="json_file",
+        default=None,
+        help="Path to a JSON request body file, or - to read from stdin.",
+    )
+
+
 def add_argument(parser: argparse.ArgumentParser, name: str, *args: Any, **kwargs: Any) -> None:
     cli_name = f"--{name.replace('_', '-')}"
     legacy_name = f"--{name}"
@@ -107,6 +122,23 @@ def add_bool_argument(
             action="store_false",
             help=f"Disable: {help_text}",
         )
+
+
+def load_json_input(args: argparse.Namespace) -> Dict[str, Any]:
+    json_input = getattr(args, "json_input", None)
+    json_file = getattr(args, "json_file", None)
+    if json_input and json_file:
+        raise ValueError("Use only one of --json or --json-file.")
+    if json_input:
+        payload = json.loads(json_input)
+    elif json_file:
+        content = sys.stdin.read() if json_file == "-" else Path(json_file).read_text(encoding="utf-8")
+        payload = json.loads(content)
+    else:
+        payload = {}
+    if not isinstance(payload, dict):
+        raise ValueError("JSON input must decode to an object.")
+    return payload
 
 
 def emit_output(data: Any, output: str = "json", pretty: bool = False) -> None:

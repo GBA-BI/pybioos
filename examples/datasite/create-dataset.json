@@ -1,0 +1,40 @@
+{
+  "name": "mc-dataset-demo",
+  "description": "Demo data set created from pybioos CLI.",
+  "createTime": 1778112000,
+  "updateTime": 1778112000,
+  "owners": "BioOS Team",
+  "category": "Genomics",
+  "catalogue": "Human omics",
+  "labels": [
+    "WGS",
+    "Cancer"
+  ],
+  "docURL": "https://example.org/docs/mc-dataset-demo",
+  "emails": [
+    "owner@example.org"
+  ],
+  "licence": "CC-BY-4.0",
+  "projectDataTypes": [
+    "FASTQ",
+    "BAM"
+  ],
+  "sampleScope": "Human cohort",
+  "externalLink": "https://example.org/project/mc-dataset-demo",
+  "externalLinkDescription": "Project home page",
+  "exampleTutorial": "https://example.org/tutorials/mc-dataset-demo",
+  "tools": "https://example.org/tools/mc-dataset-demo",
+  "publications": [
+    {
+      "name": "Example publication",
+      "accessURL": "https://doi.org/10.1000/example",
+      "authors": "Alice Zhang; Bob Li",
+      "quotation": "Zhang A, Li B. Example dataset paper. 2025."
+    }
+  ],
+  "dataFilesAccessURL": "https://example.org/downloads/mc-dataset-demo/files.csv",
+  "dataSetAccessMethodURL": "https://example.org/downloads/mc-dataset-demo/access_methods.json",
+  "dataSetTablesAccessURL": {
+    "sample_sheet": "https://example.org/downloads/mc-dataset-demo/sample_sheet.tsv"
+  }
+}

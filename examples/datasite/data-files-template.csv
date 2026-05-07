@@ -1,0 +1,3 @@
+File name,File description,Date created,Last updated,File type,File size,Data source,Data path
+example_01.fastq.gz,Paired-end read 1,24-05-01,24-05-01,FASTQ,123456789,submitted by sequencing center,s3://bucket/path/example_01.fastq.gz
+example_02.cram,Aligned reads,24-05-01,24-05-02,CRAM,234567890,repository mirror,s3://bucket/path/example_02.cram
