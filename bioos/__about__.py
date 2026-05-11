@@ -1,4 +1,4 @@
 # coding:utf-8
 
 # Package version
-__version__ = "0.0.23"
+__version__ = "0.0.24"

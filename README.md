@@ -12,7 +12,7 @@ Python SDK and CLI for Bio-OS.
 bioos --help
 ```
 
-The CLI is organized by resource groups such as `workspace`, `workflow`, `submission`, `file`, `ies`, `dockstore`, and `docker`.
+The CLI is organized by resource groups such as `workspace`, `workflow`, `submission`, `file`, `network`, `ies`, `dockstore`, and `docker`.
 
 ## Highlights
 
@@ -21,6 +21,7 @@ This release expands the unified `bioos` CLI in three main areas:
 - resilient workspace file upload with checkpoint resume and retry support
 - workspace member management commands
 - account-level usage and resource query commands
+- BioOS Network dataset discovery with GA4GH DRS object lookup
 
 It also makes workflow local-file preprocessing more robust and allows downloads from current-workspace `s3://...` paths.
 
@@ -68,7 +69,13 @@ client:
   MIRACLE_SECRET_KEY: "your-secret-key"
   serveraddr: "https://bio-top.miracle.ac.cn"
   region: "cn-north-1"
+  repository_endpoint: "https://network.miracle.ac.cn"
+  drs_endpoint: "http://imc-drs.miracle.ac.cn"
 ```
+
+`repository_endpoint` and `drs_endpoint` have these same defaults in the SDK,
+so they only need to be written when your deployment uses different Network or
+DRS endpoints.
 
 You can inspect the resolved auth status with:
 
@@ -200,6 +207,43 @@ bioos usage resource-total \
   --end-time 1776301200
 ```
 
+List BioOS Network datasets:
+
+```bash
+bioos network dataset list \
+  --search-word RNA \
+  --display-level Full
+```
+
+List files under a dataset:
+
+```bash
+bioos network dataset files \
+  --data-set-id <data-set-id> \
+  --data-library-id <data-library-id>
+```
+
+Get file IDs under a dataset:
+
+```bash
+bioos network dataset file-ids \
+  --data-set-id <data-set-id> \
+  --data-library-id <data-library-id>
+```
+
+Resolve a GA4GH DRS object:
+
+```bash
+bioos network drs --object-id <object-id>
+```
+
+Get a DRS access URL or download a DRS object:
+
+```bash
+bioos network drs access --object-id <object-id> --access-id https
+bioos network drs download --object-id <object-id> --target ./downloads/
+```
+
 ## CLI Overview
 
 Top-level command groups:
@@ -210,6 +254,7 @@ Top-level command groups:
 - `bioos workflow`
 - `bioos submission`
 - `bioos file`
+- `bioos network`
 - `bioos ies`
 - `bioos dockstore`
 - `bioos docker`
@@ -250,6 +295,18 @@ Current file commands:
 - `bioos file list`
 - `bioos file download`
 - `bioos file delete`
+
+Current Network commands:
+
+- `bioos network dataset list`
+- `bioos network dataset get`
+- `bioos network dataset files`
+- `bioos network dataset file-ids`
+- `bioos network dataset download-files`
+- `bioos network dataset drs`
+- `bioos network drs`
+- `bioos network drs access`
+- `bioos network drs download`
 
 Current usage commands:
 

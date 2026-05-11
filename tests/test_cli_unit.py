@@ -13,6 +13,7 @@ from bioos.cli import (
     check_ies_status,
     create_iesapp,
     create_workspace_bioos,
+    dataset,
     delete_workspace_members,
     delete_submission,
     download_files_from_workspace,
@@ -114,6 +115,245 @@ class TestCliHandlers(unittest.TestCase):
             result = list_files_from_workspace.handle(args)
         ws.files.list.assert_called_once_with(prefix="analysis/", recursive=True)
         self.assertEqual(result, [{"key": "a.txt"}])
+
+    def test_dataset_list_handle(self):
+        args = SimpleNamespace(
+            page=1,
+            size=10,
+            order_by="createTime:desc",
+            search_word="rna",
+            data_library_id="lib1",
+            id=["ds1", "ds2"],
+            access_control=None,
+            project_data_type=["omics"],
+            category=["rna"],
+            user_id=None,
+            catalogue=None,
+            display_level="Full",
+            group=None,
+            data_file_id=None,
+            ak="ak",
+            sk="sk",
+            endpoint="ep",
+        )
+        resource = MagicMock()
+        fake_df = MagicMock()
+        network = MagicMock()
+        network.datasets.list.return_value = fake_df
+        with patch("bioos.cli.dataset.login_with_args"), \
+                patch("bioos.bioos.network", return_value=network), \
+                patch("bioos.cli.dataset.dataframe_records", return_value=[{"id": "ds1"}]):
+            result = dataset.handle_list(args)
+
+        self.assertEqual(result, [{"id": "ds1"}])
+        network.datasets.list.assert_called_once_with(
+            page=1,
+            size=10,
+            order_by="createTime:desc",
+            search_word="rna",
+            data_library_id="lib1",
+            ids=["ds1", "ds2"],
+            access_control=None,
+            project_data_type=["omics"],
+            category=["rna"],
+            user_id=None,
+            catalogue=None,
+            display_level="Full",
+            group=None,
+            data_file_id=None,
+        )
+
+    def test_dataset_get_handle(self):
+        args = SimpleNamespace(
+            data_set_id="ds1",
+            data_library_id="lib1",
+            display_level="Full",
+            ak="ak",
+            sk="sk",
+            endpoint="ep",
+        )
+        data_set = MagicMock()
+        data_set.get.return_value = {"id": "ds1"}
+        network = MagicMock()
+        network.dataset.return_value = data_set
+        with patch("bioos.cli.dataset.login_with_args"), \
+                patch("bioos.bioos.network", return_value=network):
+            result = dataset.handle_get(args)
+
+        self.assertEqual(result, {"id": "ds1"})
+        network.dataset.assert_called_once_with("ds1", data_library_id="lib1")
+        data_set.get.assert_called_once_with(display_level="Full")
+
+    def test_dataset_files_handle(self):
+        args = SimpleNamespace(
+            data_set_id="ds1",
+            data_library_id="lib1",
+            page=1,
+            size=20,
+            order_by="fileSize:desc",
+            search_scope=["name", "drs_url"],
+            search_word="bam",
+            time_search_scope="create_time",
+            start_time=1,
+            end_time=2,
+            id=["file1"],
+            file_type=["bam"],
+            ak="ak",
+            sk="sk",
+            endpoint="ep",
+        )
+        data_set = MagicMock()
+        fake_df = MagicMock()
+        data_set.files.return_value = fake_df
+        network = MagicMock()
+        network.dataset.return_value = data_set
+        with patch("bioos.cli.dataset.login_with_args"), \
+                patch("bioos.bioos.network", return_value=network), \
+                patch("bioos.cli.dataset.dataframe_records", return_value=[{"id": "file1"}]):
+            result = dataset.handle_files(args)
+
+        self.assertEqual(result, [{"id": "file1"}])
+        network.dataset.assert_called_once_with("ds1", data_library_id="lib1")
+        data_set.files.assert_called_once_with(
+            page=1,
+            size=20,
+            order_by="fileSize:desc",
+            search_scope=["name", "drs_url"],
+            search_word="bam",
+            time_search_scope="create_time",
+            start_time=1,
+            end_time=2,
+            ids=["file1"],
+            file_type=["bam"],
+        )
+
+    def test_dataset_file_ids_handle(self):
+        args = SimpleNamespace(
+            data_set_id="ds1",
+            data_library_id="lib1",
+            search_scope=["name"],
+            search_word="fastq",
+            time_search_scope="create_time",
+            start_time=1,
+            end_time=2,
+            id=["file1"],
+            file_type=["fastq"],
+            ak="ak",
+            sk="sk",
+            endpoint="ep",
+        )
+        data_set = MagicMock()
+        data_set.file_ids.return_value = ["file1"]
+        network = MagicMock()
+        network.dataset.return_value = data_set
+        with patch("bioos.cli.dataset.login_with_args"), \
+                patch("bioos.bioos.network", return_value=network):
+            result = dataset.handle_file_ids(args)
+
+        self.assertEqual(result, {"ids": ["file1"]})
+        data_set.file_ids.assert_called_once_with(
+            search_scope=["name"],
+            search_word="fastq",
+            time_search_scope="create_time",
+            start_time=1,
+            end_time=2,
+            ids=["file1"],
+            file_type=["fastq"],
+        )
+
+    def test_dataset_download_files_handle(self):
+        args = SimpleNamespace(
+            data_set_id="ds1",
+            data_library_id="lib1",
+            target="/tmp/downloads",
+            access_id="https",
+            overwrite=True,
+            continue_on_error=True,
+            page=1,
+            size=20,
+            order_by="name:asc",
+            search_scope=["name"],
+            search_word="fastq",
+            time_search_scope=None,
+            start_time=None,
+            end_time=None,
+            id=["file1"],
+            file_type=["fastq"],
+            ak="ak",
+            sk="sk",
+            endpoint="ep",
+        )
+        data_set = MagicMock()
+        data_set.download_files.return_value = {"success": True}
+        network = MagicMock()
+        network.dataset.return_value = data_set
+        with patch("bioos.cli.dataset.login_with_args"), \
+                patch("bioos.bioos.network", return_value=network):
+            result = dataset.handle_download_files(args)
+
+        self.assertEqual(result, {"success": True})
+        data_set.download_files.assert_called_once_with(
+            target="/tmp/downloads",
+            access_id="https",
+            overwrite=True,
+            continue_on_error=True,
+            page=1,
+            size=20,
+            order_by="name:asc",
+            search_scope=["name"],
+            search_word="fastq",
+            time_search_scope=None,
+            start_time=None,
+            end_time=None,
+            ids=["file1"],
+            file_type=["fastq"],
+        )
+
+    def test_dataset_drs_handle(self):
+        args = SimpleNamespace(object_id="object-1", ak="ak", sk="sk", endpoint="ep")
+        network = MagicMock()
+        network.drs_object.return_value = {"id": "object-1"}
+        with patch("bioos.cli.dataset.login_with_args"), \
+                patch("bioos.bioos.network", return_value=network):
+            result = dataset.handle_drs(args)
+
+        self.assertEqual(result, {"id": "object-1"})
+        network.drs_object.assert_called_once_with("object-1")
+
+    def test_dataset_drs_access_handle(self):
+        args = SimpleNamespace(object_id="object-1", access_id="https", ak="ak", sk="sk", endpoint="ep")
+        network = MagicMock()
+        network.drs_access.return_value = {"url": "https://download"}
+        with patch("bioos.cli.dataset.login_with_args"), \
+                patch("bioos.bioos.network", return_value=network):
+            result = dataset.handle_drs_access(args)
+
+        self.assertEqual(result, {"url": "https://download"})
+        network.drs_access.assert_called_once_with("object-1", access_id="https")
+
+    def test_dataset_drs_download_handle(self):
+        args = SimpleNamespace(
+            object_id="object-1",
+            access_id="https",
+            target="/tmp/object.txt",
+            overwrite=True,
+            ak="ak",
+            sk="sk",
+            endpoint="ep",
+        )
+        network = MagicMock()
+        network.download_drs_object.return_value = {"success": True}
+        with patch("bioos.cli.dataset.login_with_args"), \
+                patch("bioos.bioos.network", return_value=network):
+            result = dataset.handle_drs_download(args)
+
+        self.assertEqual(result, {"success": True})
+        network.download_drs_object.assert_called_once_with(
+            "object-1",
+            target="/tmp/object.txt",
+            access_id="https",
+            overwrite=True,
+        )
 
     def test_download_files_from_workspace_handle(self):
         args = SimpleNamespace(workspace_name="ws", source=["a.txt", "b.txt"], target="/tmp/out", flatten=True)
@@ -601,6 +841,146 @@ class TestCliRootAndAuth(unittest.TestCase):
                     "/tmp/ckpt",
                     "--max-retries",
                     "5",
+                    "--output",
+                    "json",
+                ]
+            )
+
+        self.assertEqual(exit_code, 0)
+        mocked.assert_called_once()
+
+    def test_root_network_dataset_list_dispatches_to_existing_handler(self):
+        with patch("bioos.cli.dataset.handle_list", return_value=[{"id": "ds1"}]) as mocked:
+            exit_code = cli_main.main(
+                [
+                    "network",
+                    "dataset",
+                    "list",
+                    "--id",
+                    "ds1",
+                    "--output",
+                    "json",
+                ]
+            )
+
+        self.assertEqual(exit_code, 0)
+        mocked.assert_called_once()
+
+    def test_root_network_dataset_get_dispatches_to_existing_handler(self):
+        with patch("bioos.cli.dataset.handle_get", return_value={"id": "ds1"}) as mocked:
+            exit_code = cli_main.main(
+                [
+                    "network",
+                    "dataset",
+                    "get",
+                    "--data-set-id",
+                    "ds1",
+                    "--output",
+                    "json",
+                ]
+            )
+
+        self.assertEqual(exit_code, 0)
+        mocked.assert_called_once()
+
+    def test_root_network_dataset_files_dispatches_to_existing_handler(self):
+        with patch("bioos.cli.dataset.handle_files", return_value=[{"id": "file1"}]) as mocked:
+            exit_code = cli_main.main(
+                [
+                    "network",
+                    "dataset",
+                    "files",
+                    "--data-set-id",
+                    "ds1",
+                    "--data-library-id",
+                    "lib1",
+                    "--output",
+                    "json",
+                ]
+            )
+
+        self.assertEqual(exit_code, 0)
+        mocked.assert_called_once()
+
+    def test_root_network_dataset_file_ids_dispatches_to_existing_handler(self):
+        with patch("bioos.cli.dataset.handle_file_ids", return_value={"ids": ["file1"]}) as mocked:
+            exit_code = cli_main.main(
+                [
+                    "network",
+                    "dataset",
+                    "file-ids",
+                    "--data-set-id",
+                    "ds1",
+                    "--data-library-id",
+                    "lib1",
+                    "--output",
+                    "json",
+                ]
+            )
+
+        self.assertEqual(exit_code, 0)
+        mocked.assert_called_once()
+
+    def test_root_network_dataset_download_files_dispatches_to_existing_handler(self):
+        with patch("bioos.cli.dataset.handle_download_files", return_value={"success": True}) as mocked:
+            exit_code = cli_main.main(
+                [
+                    "network",
+                    "dataset",
+                    "download-files",
+                    "--data-set-id",
+                    "ds1",
+                    "--data-library-id",
+                    "lib1",
+                    "--target",
+                    "/tmp/downloads",
+                    "--output",
+                    "json",
+                ]
+            )
+
+        self.assertEqual(exit_code, 0)
+        mocked.assert_called_once()
+
+    def test_root_network_drs_dispatches_to_existing_handler(self):
+        with patch("bioos.cli.dataset.handle_drs", return_value={"id": "object-1"}) as mocked:
+            exit_code = cli_main.main(
+                ["network", "drs", "--object-id", "object-1", "--output", "json"]
+            )
+
+        self.assertEqual(exit_code, 0)
+        mocked.assert_called_once()
+
+    def test_root_network_drs_access_dispatches_to_existing_handler(self):
+        with patch("bioos.cli.dataset.handle_drs_access", return_value={"url": "https://download"}) as mocked:
+            exit_code = cli_main.main(
+                [
+                    "network",
+                    "drs",
+                    "access",
+                    "--object-id",
+                    "object-1",
+                    "--access-id",
+                    "https",
+                    "--output",
+                    "json",
+                ]
+            )
+
+        self.assertEqual(exit_code, 0)
+        mocked.assert_called_once()
+
+    def test_root_network_drs_download_dispatches_to_existing_handler(self):
+        with patch("bioos.cli.dataset.handle_drs_download", return_value={"success": True}) as mocked:
+            exit_code = cli_main.main(
+                [
+                    "network",
+                    "drs",
+                    "download",
+                    "--object-id",
+                    "object-1",
+                    "--target",
+                    "/tmp/object.txt",
                     "--output",
                     "json",
                 ]
