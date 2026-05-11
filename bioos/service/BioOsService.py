@@ -247,6 +247,11 @@ class BioOsService(Service):
                 'Action': 'GetExportWorkspacePreSignedURL',
                 'Version': '2021-03-04'
             }, {}, {}),
+            'GetRepositoryPassport':
+            ApiInfo('POST', '/', {
+                'Action': 'GetRepositoryPassport',
+                'Version': '2021-03-04'
+            }, {}, {}),
         }
         return api_info
 
@@ -372,6 +377,9 @@ class BioOsService(Service):
 
     def get_export_workspace_presigned_url(self, params):
         return self.__request("GetExportWorkspacePreSignedURL", params)
+
+    def get_repository_passport(self, params):
+        return self.__request("GetRepositoryPassport", params)
 
     def __request(self, action, params):
         res = self.json(
