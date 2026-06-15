@@ -2,7 +2,6 @@ from pandas import DataFrame
 from volcengine.const.Const import REGION_CN_NORTH1
 
 from bioos.config import Config,DEFAULT_ENDPOINT
-from bioos.resource.network import NetworkResource
 from bioos.resource.usage import UsageResource
 from bioos.resource.utility import UtilityResource
 from bioos.resource.workspaces import Workspace
@@ -124,12 +123,3 @@ def usage() -> UsageResource:
     :rtype: UsageResource
     """
     return UsageResource()
-
-
-def network() -> NetworkResource:
-    """Returns the account-level BioOS Network resource domain.
-
-    :return: Network resource object
-    :rtype: NetworkResource
-    """
-    return NetworkResource()

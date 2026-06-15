@@ -1,6 +1,6 @@
 # pybioos
 
-Python SDK and CLI for Bio-OS.
+Python SDK and CLI for Bio-OS, with a sibling `network` SDK package for BioOS Network resources.
 
 [![Documentation Status](https://readthedocs.org/projects/pybioos/badge/?version=latest)](https://pybioos.readthedocs.io/en/latest/?badge=latest)
 
@@ -12,16 +12,16 @@ Python SDK and CLI for Bio-OS.
 bioos --help
 ```
 
-The CLI is organized by resource groups such as `workspace`, `workflow`, `submission`, `file`, `network`, `ies`, `dockstore`, and `docker`.
+The CLI is organized by resource groups such as `workspace`, `workflow`, `submission`, `file`, `ies`, `dockstore`, and `docker`.
 
 ## Highlights
 
-This release expands the unified `bioos` CLI in three main areas:
+This release expands the unified `bioos` CLI and separates Network into its own SDK package:
 
 - resilient workspace file upload with checkpoint resume and retry support
 - workspace member management commands
 - account-level usage and resource query commands
-- BioOS Network dataset discovery with GA4GH DRS object lookup
+- top-level `network` SDK access for Repository, Data Library, Dataset, and GA4GH DRS resources
 
 It also makes workflow local-file preprocessing more robust and allows downloads from current-workspace `s3://...` paths.
 
@@ -32,6 +32,9 @@ Install from PyPI:
 ```bash
 pip install pybioos
 ```
+
+If you need the latest unreleased changes from `main`, including the sibling
+`network` package before the next PyPI release, install from source instead.
 
 Install from source:
 
@@ -45,6 +48,7 @@ After installation, verify the CLI:
 
 ```bash
 bioos --help
+network --help
 ```
 
 ## Authentication
@@ -70,12 +74,24 @@ client:
   serveraddr: "https://bio-top.miracle.ac.cn"
   region: "cn-north-1"
   repository_endpoint: "https://network.miracle.ac.cn"
-  drs_endpoint: "http://imc-drs.miracle.ac.cn"
 ```
 
-`repository_endpoint` and `drs_endpoint` have these same defaults in the SDK,
-so they only need to be written when your deployment uses different Network or
-DRS endpoints.
+Network uses the same BioOS AK/SK only as a bridge to obtain a Network passport
+through `GetRepositoryPassport`. `repository_endpoint` is the single Network
+Repository / central catalogue endpoint. DRS endpoints are resolved from the
+selected data library's `DRSHost` or from a `drs://...` URI, so configs should
+not pin one global DRS endpoint.
+
+The `network` CLI resolves BioOS credentials from the same flags, environment
+variables, and config file. The Python `network` SDK is explicit: call
+`network.login_with_bioos(...)` first, or provide a Network passport with
+`network.login_with_passport(...)`. If the current BioOS account is not
+associated with a Network account, `GetRepositoryPassport` will fail and Network
+resources cannot be queried.
+
+Network commands also accept `--passport` to bypass the BioOS bridge when you
+already have a Network passport, and `--repository-endpoint` to override the
+Repository endpoint for one command.
 
 You can inspect the resolved auth status with:
 
@@ -207,41 +223,67 @@ bioos usage resource-total \
   --end-time 1776301200
 ```
 
-List BioOS Network datasets:
+Use Network as a sibling SDK domain:
+
+```python
+import network
+
+network.login_with_bioos(
+    access_key="AKxxxx",
+    secret_key="SKxxxx",
+    endpoint="https://bio-top.miracle.ac.cn",
+    region="cn-north-1",
+)
+
+# Repository-level discovery across data libraries.
+network.datasets().list(search_word="RNA", display_level="Minimal")
+
+# DataLibrary is the data-site boundary.
+library = network.library("<data-library-id>")
+library.datasets.list(size=10)
+
+# "My datasets" can be expressed by passing the current Network user ID.
+library.datasets.list(user_id=network.current_user_id(), size=10)
+
+# Dataset files usually contain drsURL values.
+dataset = library.dataset("<data-set-id>")
+dataset.files(size=5)
+dataset.file_ids()
+
+# DRS is an independent entry point.
+network.drs_object("drs://drs.example/object-id")
+network.drs_access("drs://drs.example/object-id", access_id="https")
+network.drs_locate("drs://drs.example/object-id")
+```
+
+Use Network from the sibling CLI:
 
 ```bash
-bioos network dataset list \
+network library list
+network library get --data-library-id <data-library-id>
+
+network dataset list \
   --search-word RNA \
-  --display-level Full
-```
+  --display-level Minimal
 
-List files under a dataset:
+network library dataset list \
+  --data-library-id <data-library-id> \
+  --mine \
+  --display-level Minimal
 
-```bash
-bioos network dataset files \
+network library dataset files \
+  --data-library-id <data-library-id> \
+  --data-set-id <data-set-id>
+
+network library dataset download-files \
+  --data-library-id <data-library-id> \
   --data-set-id <data-set-id> \
-  --data-library-id <data-library-id>
-```
+  --target ./downloads
 
-Get file IDs under a dataset:
-
-```bash
-bioos network dataset file-ids \
-  --data-set-id <data-set-id> \
-  --data-library-id <data-library-id>
-```
-
-Resolve a GA4GH DRS object:
-
-```bash
-bioos network drs --object-id <object-id>
-```
-
-Get a DRS access URL or download a DRS object:
-
-```bash
-bioos network drs access --object-id <object-id> --access-id https
-bioos network drs download --object-id <object-id> --target ./downloads/
+network drs get --object-id drs://drs.example/object-id
+network drs access --object-id drs://drs.example/object-id
+network drs locate --drs-path drs://drs.example/object-id
+network drs download --object-id drs://drs.example/object-id --target ./downloads
 ```
 
 ## CLI Overview
@@ -254,10 +296,28 @@ Top-level command groups:
 - `bioos workflow`
 - `bioos submission`
 - `bioos file`
-- `bioos network`
 - `bioos ies`
 - `bioos dockstore`
 - `bioos docker`
+
+Network has its own sibling CLI:
+
+- `network library list`
+- `network library get`
+- `network library dataset list`
+- `network library dataset get`
+- `network library dataset files`
+- `network library dataset file-ids`
+- `network library dataset download-files`
+- `network dataset list`
+- `network dataset get`
+- `network dataset files`
+- `network dataset file-ids`
+- `network dataset download-files`
+- `network drs get`
+- `network drs access`
+- `network drs locate`
+- `network drs download`
 
 Common examples:
 
@@ -275,7 +335,6 @@ Current workflow commands:
 - `bioos workflow import-status`
 - `bioos workflow run-status`
 - `bioos workflow submit`
-- `bioos workflow validate`
 
 Current workspace commands:
 
@@ -295,18 +354,6 @@ Current file commands:
 - `bioos file list`
 - `bioos file download`
 - `bioos file delete`
-
-Current Network commands:
-
-- `bioos network dataset list`
-- `bioos network dataset get`
-- `bioos network dataset files`
-- `bioos network dataset file-ids`
-- `bioos network dataset download-files`
-- `bioos network dataset drs`
-- `bioos network drs`
-- `bioos network drs access`
-- `bioos network drs download`
 
 Current usage commands:
 

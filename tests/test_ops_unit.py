@@ -6,34 +6,25 @@ from types import SimpleNamespace
 from urllib.parse import parse_qs, urlparse
 from unittest.mock import MagicMock, patch
 
-from bioos.internal.repository import RepositoryPassportProvider, RepositoryRestClient
-from bioos.internal import repository as repository_internal
-from bioos.ops import docker_build, dockstore, womtool, workspace_files
+from requests.exceptions import SSLError
+
+from bioos.ops import docker_build, dockstore, workspace_files
 from bioos.internal.tos import TOSHandler
 from bioos.resource.files import FileResource
-from bioos.resource.datasets import DataSet, DataSetResource
-from bioos.resource.network import NetworkResource
 from bioos.resource.usage import UsageResource
 from bioos.resource.workspaces import Workspace
+from bioos.service.BioOsService import BioOsService
+from network import config as repository_internal
+from network.auth import RepositoryPassportProvider, passport_token_subject
+from network.internal.http import RepositoryRestClient
+from network.resource.data_libraries import DataLibrary, DataLibraryResource
+from network.resource.datasets import DataSet, DataSetResource
+from network.resource.drs import DRSResource
+from network.resource.network import NetworkResource
+from network.resource.repository import RepositoryResource
 
 
 class TestOpsHelpers(unittest.TestCase):
-    def test_validate_wdl_file(self):
-        with tempfile.NamedTemporaryFile(suffix=".wdl") as handle, \
-                patch("bioos.ops.womtool.subprocess.run") as run_mock:
-            run_mock.return_value = MagicMock(stdout="ok", stderr="")
-            result = womtool.validate_wdl_file(handle.name)
-        self.assertTrue(result["success"])
-        run_mock.assert_called_once()
-
-    def test_validate_workflow_input_json_file(self):
-        with tempfile.NamedTemporaryFile(suffix=".wdl") as wdl, tempfile.NamedTemporaryFile(suffix=".json") as inputs, \
-                patch("bioos.ops.womtool.subprocess.run") as run_mock:
-            run_mock.return_value = MagicMock(stdout="ok", stderr="")
-            result = womtool.validate_workflow_input_json_file(wdl.name, inputs.name)
-        self.assertTrue(result["success"])
-        run_mock.assert_called_once()
-
     def test_get_docker_image_url(self):
         self.assertEqual(
             docker_build.get_docker_image_url("reg", "ns", "repo", "v1"),
@@ -288,12 +279,27 @@ class TestOpsHelpers(unittest.TestCase):
         login_info = SimpleNamespace(endpoint="https://bioos", region="cn-north-1", access_key="ak")
         provider = RepositoryPassportProvider(expires_in=3600, refresh_margin=60)
 
-        with patch("bioos.internal.repository.Config.service", return_value=service), \
-                patch("bioos.internal.repository.Config.login_info", return_value=login_info):
+        with patch("network.auth.Config.service", return_value=service), \
+                patch("network.auth.Config.login_info", return_value=login_info):
             self.assertEqual(provider.get_token(), "passport-1")
             self.assertEqual(provider.get_token(), "passport-1")
 
         service.get_repository_passport.assert_called_once_with({"ExpiresIn": 3600})
+
+    def test_bioos_service_registers_search_drs(self):
+        service = BioOsService.__new__(BioOsService)
+        params = {
+            "RepositoryEndpoint": "https://network.example",
+            "DRSPath": "drs://drs.example/object-1",
+            "AAIPassport": "passport-1",
+        }
+
+        self.assertIn("SearchDRS", BioOsService.get_api_info())
+        with patch.object(BioOsService, "_BioOsService__request", return_value={"DataSetID": "ds1"}) as request_mock:
+            result = service.search_drs(params)
+
+        self.assertEqual(result, {"DataSetID": "ds1"})
+        request_mock.assert_called_once_with("SearchDRS", params)
 
     def test_repository_passport_provider_requires_token(self):
         service = MagicMock()
@@ -301,8 +307,8 @@ class TestOpsHelpers(unittest.TestCase):
         login_info = SimpleNamespace(endpoint="https://bioos", region="cn-north-1", access_key="ak")
         provider = RepositoryPassportProvider()
 
-        with patch("bioos.internal.repository.Config.service", return_value=service), \
-                patch("bioos.internal.repository.Config.login_info", return_value=login_info):
+        with patch("network.auth.Config.service", return_value=service), \
+                patch("network.auth.Config.login_info", return_value=login_info):
             with self.assertRaisesRegex(RuntimeError, "did not return a passport token"):
                 provider.get_token()
 
@@ -315,21 +321,22 @@ class TestOpsHelpers(unittest.TestCase):
         login_info = SimpleNamespace(endpoint="https://bioos", region="cn-north-1", access_key="ak")
         provider = RepositoryPassportProvider()
 
-        with patch("bioos.internal.repository.Config.service", return_value=service), \
-                patch("bioos.internal.repository.Config.login_info", return_value=login_info):
+        with patch("network.auth.Config.service", return_value=service), \
+                patch("network.auth.Config.login_info", return_value=login_info):
             with self.assertRaisesRegex(RuntimeError, "current BioOS account is associated with a BioOS Network account"):
                 provider.get_token()
 
+    def test_passport_token_subject_reads_jwt_subject(self):
+        token = "e30.eyJzdWIiOiJ1c2VyLTEifQ.signature"
+
+        self.assertEqual(passport_token_subject(token), "user-1")
+
     def test_repository_endpoint_defaults_are_network_endpoints(self):
         with patch.dict("os.environ", {}, clear=True), \
-                patch("bioos.internal.repository._load_client_config", return_value={}):
+                patch("network.config._load_client_config", return_value={}):
             self.assertEqual(
                 repository_internal.resolve_repository_endpoint(),
                 "https://network.miracle.ac.cn",
-            )
-            self.assertEqual(
-                repository_internal.resolve_drs_endpoint(),
-                "http://imc-drs.miracle.ac.cn",
             )
 
     def test_repository_rest_client_sends_bearer_and_repeated_query_params(self):
@@ -353,7 +360,7 @@ class TestOpsHelpers(unittest.TestCase):
             session=session,
         )
 
-        with patch("bioos.internal.repository.Config.login_info", return_value=login_info):
+        with patch("network.internal.http.Config.login_info", return_value=login_info):
             result = client.get("/api/repository/data_set", params={"id": ["ds1", "ds2"], "page": 1})
 
         self.assertEqual(result, {"ok": True})
@@ -467,6 +474,87 @@ class TestOpsHelpers(unittest.TestCase):
             },
         )
 
+    def test_library_dataset_files_use_data_site_endpoint_without_library_query(self):
+        resource = DataSetResource.__new__(DataSetResource)
+        resource.data_library_id = "lib1"
+        resource.data_site_client = MagicMock()
+        resource.data_site_client.get.return_value = {"Items": [{"id": "file1"}]}
+        resource.repository_client = MagicMock()
+        dataset = DataSet.__new__(DataSet)
+        dataset.data_set_id = "ds1"
+        dataset.data_library_id = "lib1"
+        dataset.resource = resource
+
+        result = dataset.files(ids=["file1"], search_scope=["name"])
+
+        self.assertEqual(result.to_dict(orient="records"), [{"id": "file1"}])
+        resource.data_site_client.get.assert_called_once_with(
+            "/api/data-library/data_set/ds1/data_file",
+            params={
+                "searchScope": ["name"],
+                "id": ["file1"],
+            },
+        )
+        resource.repository_client.get.assert_not_called()
+
+    def test_library_dataset_files_tries_next_data_site_endpoint_before_repository(self):
+        resource = DataSetResource.__new__(DataSetResource)
+        resource.data_library_id = "lib1"
+        primary_client = MagicMock()
+        primary_client.get.side_effect = SSLError("tls failed")
+        secondary_client = MagicMock()
+        secondary_client.get.return_value = {"Items": [{"id": "file1"}]}
+        resource.data_site_client = primary_client
+        resource.data_site_clients = [primary_client, secondary_client]
+        resource.repository_client = MagicMock()
+        dataset = DataSet.__new__(DataSet)
+        dataset.data_set_id = "ds1"
+        dataset.data_library_id = "lib1"
+        dataset.resource = resource
+
+        result = dataset.files(ids=["file1"], search_scope=["name"])
+
+        self.assertEqual(result.to_dict(orient="records"), [{"id": "file1"}])
+        primary_client.get.assert_called_once_with(
+            "/api/data-library/data_set/ds1/data_file",
+            params={
+                "searchScope": ["name"],
+                "id": ["file1"],
+            },
+        )
+        secondary_client.get.assert_called_once_with(
+            "/api/data-library/data_set/ds1/data_file",
+            params={
+                "searchScope": ["name"],
+                "id": ["file1"],
+            },
+        )
+        resource.repository_client.get.assert_not_called()
+
+    def test_library_dataset_files_falls_back_to_repository_when_data_site_unreachable(self):
+        resource = DataSetResource.__new__(DataSetResource)
+        resource.data_library_id = "lib1"
+        resource.data_site_client = MagicMock()
+        resource.data_site_client.get.side_effect = SSLError("tls failed")
+        resource.repository_client = MagicMock()
+        resource.repository_client.get.return_value = {"Items": [{"id": "file1"}]}
+        dataset = DataSet.__new__(DataSet)
+        dataset.data_set_id = "ds1"
+        dataset.data_library_id = "lib1"
+        dataset.resource = resource
+
+        result = dataset.files(ids=["file1"], search_scope=["name"])
+
+        self.assertEqual(result.to_dict(orient="records"), [{"id": "file1"}])
+        resource.repository_client.get.assert_called_once_with(
+            "/api/repository/data_set/ds1/data_file",
+            params={
+                "searchScope": ["name"],
+                "id": ["file1"],
+                "dataLibraryID": "lib1",
+            },
+        )
+
     def test_dataset_file_ids_maps_params_and_returns_ids(self):
         resource = DataSetResource.__new__(DataSetResource)
         resource.repository_client = MagicMock()
@@ -488,71 +576,58 @@ class TestOpsHelpers(unittest.TestCase):
             },
         )
 
-    def test_dataset_drs_object_uses_drs_client(self):
+    def test_dataset_drs_object_uses_drs_resource(self):
         resource = DataSetResource.__new__(DataSetResource)
-        resource.drs_client = MagicMock()
-        resource.drs_client.get.return_value = {"id": "object-1"}
+        resource.drs = MagicMock()
+        resource.drs.object.return_value = {"id": "object-1"}
 
         result = resource.drs_object("object/1")
 
         self.assertEqual(result, {"id": "object-1"})
-        resource.drs_client.get.assert_called_once_with("/ga4gh/drs/v1/objects/object%2F1")
+        resource.drs.object.assert_called_once_with("object/1")
 
-    def test_dataset_drs_access_uses_access_endpoint(self):
+    def test_dataset_drs_access_uses_drs_resource(self):
         resource = DataSetResource.__new__(DataSetResource)
-        resource.drs_client = MagicMock()
-        resource.drs_client.get.side_effect = [
-            {"id": "object-1", "access_methods": [{"type": "https", "access_id": "https"}]},
-            {"url": "https://download"},
-        ]
+        resource.drs = MagicMock()
+        resource.drs.access.return_value = {"url": "https://download"}
 
         result = resource.drs_access("drs://imc-drs.miracle.ac.cn/object/1", access_id="https")
 
         self.assertEqual(result, {"url": "https://download"})
-        self.assertEqual(resource.drs_client.get.call_count, 2)
-        resource.drs_client.get.assert_any_call("/ga4gh/drs/v1/objects/object%2F1")
-        resource.drs_client.get.assert_any_call(
-            "/ga4gh/drs/v1/objects/object%2F1/access/https"
+        resource.drs.access.assert_called_once_with(
+            "drs://imc-drs.miracle.ac.cn/object/1",
+            access_id="https",
         )
 
-    def test_dataset_drs_access_uses_object_access_methods_first(self):
+    def test_dataset_download_drs_object_uses_drs_resource(self):
         resource = DataSetResource.__new__(DataSetResource)
-        resource.drs_client = MagicMock()
-        resource.drs_client.get.return_value = {
-            "id": "object-1",
-            "access_methods": [
-                {"type": "https", "access_id": "https", "access_url": {"url": "https://download"}},
-                {"type": "tos", "access_id": "tos", "access_url": {"url": "s3://bucket/key"}},
-            ],
-        }
-
-        result = resource.drs_access("object-1", access_id="https")
-
-        self.assertEqual(result, {"url": "https://download"})
-        resource.drs_client.get.assert_called_once_with("/ga4gh/drs/v1/objects/object-1")
-
-    def test_dataset_download_drs_object_gets_access_url_and_writes_file(self):
-        resource = DataSetResource.__new__(DataSetResource)
-        resource.drs_client = MagicMock()
-        resource.drs_client.get.return_value = {
-            "name": "object.txt",
-            "access_methods": [
-                {"type": "https", "access_id": "https", "access_url": {"url": "https://download", "headers": ["X-Test: yes"]}},
-            ],
-        }
-        resource.drs_client.download_url.return_value = {
+        resource.drs = MagicMock()
+        resource.drs.download_object.return_value = {
+            "success": True,
+            "object_id": "object-1",
             "target": "/tmp/object.txt",
             "bytes_written": 4,
         }
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            result = resource.download_drs_object("object-1", target=tmpdir)
+            result = resource.download_drs_object(
+                "drs://drs.example/object-1",
+                target=tmpdir,
+                object_info={"name": "object.txt"},
+                object_name="object.txt",
+            )
 
         self.assertTrue(result["success"])
         self.assertEqual(result["object_id"], "object-1")
-        resource.drs_client.download_url.assert_called_once()
-        self.assertEqual(resource.drs_client.download_url.call_args.args[0], "https://download")
-        self.assertEqual(resource.drs_client.download_url.call_args.kwargs["headers"], {"X-Test": "yes"})
+        resource.drs.download_object.assert_called_once_with(
+            "drs://drs.example/object-1",
+            target=tmpdir,
+            access_id="https",
+            overwrite=False,
+            chunk_size=1024 * 1024,
+            object_info={"name": "object.txt"},
+            object_name="object.txt",
+        )
 
     def test_dataset_download_files_uses_file_records_and_drs_download(self):
         resource = DataSetResource.__new__(DataSetResource)
@@ -578,7 +653,7 @@ class TestOpsHelpers(unittest.TestCase):
         self.assertTrue(result["success"])
         self.assertEqual(result["downloaded_count"], 1)
         resource.download_drs_object.assert_called_once_with(
-            "file1",
+            "drs://imc-drs.miracle.ac.cn/file1",
             target=expected_target,
             access_id="https",
             overwrite=False,
@@ -589,35 +664,199 @@ class TestOpsHelpers(unittest.TestCase):
     def test_network_resource_exposes_dataset_and_drs_helpers(self):
         network = NetworkResource.__new__(NetworkResource)
         network.repository_endpoint = "https://network.miracle.ac.cn"
-        network.drs_endpoint = "http://imc-drs.miracle.ac.cn"
         network.passport_provider = MagicMock()
 
-        with patch("bioos.resource.network.DataSetResource") as resource_factory:
+        with patch("network.resource.network.RepositoryResource") as repository_factory, \
+                patch("network.resource.network.DRSResource") as drs_factory:
             data_sets = network.datasets
+            libraries = network.libraries
+            library = network.library("lib1")
             data_set = network.dataset("ds1", data_library_id="lib1")
-            drs_result = network.drs_object("object-1")
-            access_result = network.drs_access("object-1", access_id="https")
-            download_result = network.download_drs_object("object-1", target="/tmp/object.txt", overwrite=True)
+            drs_result = network.drs_object("drs://drs.example/object-1")
+            access_result = network.drs_access("drs://drs.example/object-1", access_id="https")
+            locate_result = network.drs_locate("drs://drs.example/object-1")
+            download_result = network.download_drs_object(
+                "drs://drs.example/object-1",
+                target="/tmp/object.txt",
+                overwrite=True,
+            )
 
-        self.assertEqual(data_sets, resource_factory.return_value)
-        resource_factory.assert_called_with(
+        repository_factory.assert_called_with(
             repository_endpoint="https://network.miracle.ac.cn",
-            drs_endpoint="http://imc-drs.miracle.ac.cn",
             passport_provider=network.passport_provider,
         )
-        resource_factory.return_value.data_set.assert_called_once_with("ds1", data_library_id="lib1")
-        resource_factory.return_value.drs_object.assert_called_once_with("object-1")
-        resource_factory.return_value.drs_access.assert_called_once_with("object-1", access_id="https")
-        resource_factory.return_value.download_drs_object.assert_called_once_with(
-            "object-1",
+        self.assertEqual(data_sets, repository_factory.return_value.datasets)
+        self.assertEqual(libraries, repository_factory.return_value.libraries)
+        repository_factory.return_value.library.assert_called_once_with("lib1")
+        repository_factory.return_value.dataset.assert_called_once_with("ds1", data_library_id="lib1")
+        drs_factory.assert_called_with(
+            repository_endpoint="https://network.miracle.ac.cn",
+            passport_provider=network.passport_provider,
+        )
+        drs_factory.return_value.object.assert_called_once_with("drs://drs.example/object-1")
+        drs_factory.return_value.access.assert_called_once_with("drs://drs.example/object-1", access_id="https")
+        drs_factory.return_value.locate.assert_called_once_with("drs://drs.example/object-1")
+        drs_factory.return_value.download_object.assert_called_once_with(
+            "drs://drs.example/object-1",
             target="/tmp/object.txt",
             access_id="https",
             overwrite=True,
         )
-        self.assertEqual(data_set, resource_factory.return_value.data_set.return_value)
-        self.assertEqual(drs_result, resource_factory.return_value.drs_object.return_value)
-        self.assertEqual(access_result, resource_factory.return_value.drs_access.return_value)
-        self.assertEqual(download_result, resource_factory.return_value.download_drs_object.return_value)
+        self.assertEqual(library, repository_factory.return_value.library.return_value)
+        self.assertEqual(data_set, repository_factory.return_value.dataset.return_value)
+        self.assertEqual(drs_result, drs_factory.return_value.object.return_value)
+        self.assertEqual(access_result, drs_factory.return_value.access.return_value)
+        self.assertEqual(locate_result, drs_factory.return_value.locate.return_value)
+        self.assertEqual(download_result, drs_factory.return_value.download_object.return_value)
+
+    def test_network_resources_are_not_singletons(self):
+        provider = MagicMock()
+        repository_client = MagicMock()
+        data_site_client = MagicMock()
+        library_resource = DataLibraryResource(
+            repository_endpoint="https://network.example",
+            repository_client=repository_client,
+            passport_provider=provider,
+        )
+        dataset_resource = DataSetResource(
+            repository_endpoint="https://network.example",
+            data_library_id="lib1",
+            data_site_client=data_site_client,
+            repository_client=repository_client,
+            passport_provider=provider,
+        )
+
+        self.assertIsNot(
+            NetworkResource(repository_endpoint="https://network.example", passport_provider=provider),
+            NetworkResource(repository_endpoint="https://network.example", passport_provider=provider),
+        )
+        self.assertIsNot(
+            RepositoryResource(repository_endpoint="https://network.example", passport_provider=provider),
+            RepositoryResource(repository_endpoint="https://network.example", passport_provider=provider),
+        )
+        self.assertIsNot(
+            DataLibraryResource(
+                repository_endpoint="https://network.example",
+                repository_client=repository_client,
+                passport_provider=provider,
+            ),
+            DataLibraryResource(
+                repository_endpoint="https://network.example",
+                repository_client=repository_client,
+                passport_provider=provider,
+            ),
+        )
+        self.assertIsNot(
+            DataLibrary("lib1", resource=library_resource),
+            DataLibrary("lib1", resource=library_resource),
+        )
+        self.assertIsNot(
+            DataSetResource(
+                repository_endpoint="https://network.example",
+                data_library_id="lib1",
+                data_site_client=data_site_client,
+                repository_client=repository_client,
+                passport_provider=provider,
+            ),
+            DataSetResource(
+                repository_endpoint="https://network.example",
+                data_library_id="lib1",
+                data_site_client=data_site_client,
+                repository_client=repository_client,
+                passport_provider=provider,
+            ),
+        )
+        self.assertIsNot(
+            DataSet("ds1", data_library_id="lib1", resource=dataset_resource),
+            DataSet("ds1", data_library_id="lib1", resource=dataset_resource),
+        )
+        self.assertIsNot(
+            DRSResource(endpoint="https://drs.example", passport_provider=provider),
+            DRSResource(endpoint="https://drs.example", passport_provider=provider),
+        )
+
+    def test_data_library_resource_list_and_library_context(self):
+        resource = DataLibraryResource.__new__(DataLibraryResource)
+        resource.repository_endpoint = "https://network.example"
+        resource.repository_client = MagicMock()
+        resource.repository_client.get.return_value = {
+            "items": [
+                {
+                    "id": "lib1",
+                    "APIEndpoint": "https://site.example/api/data-library",
+                    "DRSHost": "https://drs.example/ga4gh/drs/v1",
+                    "webEndpoint": "https://web.example",
+                }
+            ]
+        }
+        resource.passport_provider = MagicMock()
+
+        result = resource.list(ids=["lib1"], display_name=["Guangzhou"])
+        library = resource.data_library("lib1", record=result.to_dict(orient="records")[0])
+        data_sets = library.datasets
+
+        self.assertEqual(result.to_dict(orient="records")[0]["id"], "lib1")
+        resource.repository_client.get.assert_called_once_with(
+            "/api/repository/data_library",
+            params={"id": ["lib1"], "displayName": ["Guangzhou"]},
+        )
+        self.assertEqual(library.api_endpoint, "https://site.example/api/data-library")
+        self.assertEqual(library.web_endpoint, "https://web.example")
+        self.assertEqual(library.drs_host, "https://drs.example/ga4gh/drs/v1")
+        self.assertEqual(data_sets.data_library_id, "lib1")
+        self.assertEqual(data_sets.data_site_client.endpoint, "https://web.example")
+        self.assertEqual(
+            [client.endpoint for client in data_sets.data_site_clients],
+            ["https://web.example", "https://site.example"],
+        )
+        self.assertEqual(library.drs.endpoint, "https://drs.example")
+
+    def test_drs_resource_uses_host_from_drs_uri(self):
+        drs = DRSResource.__new__(DRSResource)
+        drs.endpoint = None
+        drs.fallback_endpoint = None
+        drs.passport_provider = MagicMock()
+        drs._clients = {}
+
+        with patch("network.resource.drs.NetworkHttpClient") as client_factory:
+            client_factory.return_value.get.return_value = {"id": "object/1"}
+            result = drs.object("drs://drs.example/object/1")
+
+        self.assertEqual(result, {"id": "object/1"})
+        client_factory.assert_called_once_with(
+            endpoint="http://drs.example",
+            passport_provider=drs.passport_provider,
+            sign_requests=False,
+        )
+        client_factory.return_value.get.assert_called_once_with("/ga4gh/drs/v1/objects/object%2F1")
+
+    def test_drs_resource_locate_uses_search_drs_bridge(self):
+        drs = DRSResource.__new__(DRSResource)
+        drs.repository_endpoint = "https://network.example"
+        drs.passport_provider = MagicMock()
+        drs.passport_provider.get_token.return_value = "passport-1"
+
+        with patch("network.resource.drs.Config.service") as service_mock:
+            service_mock.return_value.search_drs.return_value = {
+                "DataSetID": "ds1",
+                "WebEndpoint": "https://library.example",
+            }
+            result = drs.locate("drs://drs.example/object-1")
+
+        self.assertEqual(
+            result,
+            {
+                "DataSetID": "ds1",
+                "WebEndpoint": "https://library.example",
+            },
+        )
+        service_mock.return_value.search_drs.assert_called_once_with(
+            {
+                "RepositoryEndpoint": "https://network.example",
+                "DRSPath": "drs://drs.example/object-1",
+                "AAIPassport": "passport-1",
+            }
+        )
 
     def test_usage_resource_rejects_invalid_asset_type(self):
         usage = UsageResource.__new__(UsageResource)
