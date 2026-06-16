@@ -301,6 +301,17 @@ class TestOpsHelpers(unittest.TestCase):
         self.assertEqual(result, {"DataSetID": "ds1"})
         request_mock.assert_called_once_with("SearchDRS", params)
 
+    def test_bioos_service_registers_delete_workspace(self):
+        service = BioOsService.__new__(BioOsService)
+        params = {"ID": "wid"}
+
+        self.assertIn("DeleteWorkspace", BioOsService.get_api_info())
+        with patch.object(BioOsService, "_BioOsService__request", return_value={}) as request_mock:
+            result = service.delete_workspace(params)
+
+        self.assertEqual(result, {})
+        request_mock.assert_called_once_with("DeleteWorkspace", params)
+
     def test_repository_passport_provider_requires_token(self):
         service = MagicMock()
         service.get_repository_passport.return_value = {"ExpiresIn": 3600}
@@ -937,6 +948,70 @@ class TestOpsHelpers(unittest.TestCase):
                 },
             }
         )
+
+    def test_workspace_delete_calls_service(self):
+        workspace = Workspace.__new__(Workspace)
+        workspace._id = "wid"
+
+        with patch("bioos.resource.workspaces.Config.service") as service_mock:
+            service_mock.return_value.list_workspaces.return_value = {"Items": [{"ID": "wid"}]}
+            service_mock.return_value.delete_workspace.return_value = {}
+            result = workspace.delete()
+
+        self.assertEqual(result, {})
+        service_mock.return_value.list_workspaces.assert_called_once_with(
+            {"Filter": {"IDs": ["wid"]}}
+        )
+        service_mock.return_value.delete_workspace.assert_called_once_with({"ID": "wid"})
+
+    def test_workspace_delete_resolves_workspace_name(self):
+        workspace = Workspace.__new__(Workspace)
+        workspace._id = "test1"
+
+        with patch("bioos.resource.workspaces.Config.service") as service_mock:
+            service_mock.return_value.list_workspaces.side_effect = [
+                {"Items": []},
+                {"Items": [{"ID": "wid", "Name": "test1"}, {"ID": "other", "Name": "other"}]},
+            ]
+            service_mock.return_value.delete_workspace.return_value = {}
+            result = workspace.delete()
+
+        self.assertEqual(result, {})
+        service_mock.return_value.list_workspaces.assert_has_calls(
+            [
+                unittest.mock.call({"Filter": {"IDs": ["test1"]}}),
+                unittest.mock.call({"PageSize": 0}),
+            ]
+        )
+        service_mock.return_value.delete_workspace.assert_called_once_with({"ID": "wid"})
+
+    def test_workspace_delete_rejects_duplicate_workspace_name(self):
+        workspace = Workspace.__new__(Workspace)
+        workspace._id = "test1"
+
+        with patch("bioos.resource.workspaces.Config.service") as service_mock:
+            service_mock.return_value.list_workspaces.side_effect = [
+                {"Items": []},
+                {"Items": [{"ID": "wid1", "Name": "test1"}, {"ID": "wid2", "Name": "test1"}]},
+            ]
+            with self.assertRaisesRegex(ValueError, "Multiple workspaces"):
+                workspace.delete()
+
+        service_mock.return_value.delete_workspace.assert_not_called()
+
+    def test_workspace_delete_rejects_missing_workspace(self):
+        workspace = Workspace.__new__(Workspace)
+        workspace._id = "missing"
+
+        with patch("bioos.resource.workspaces.Config.service") as service_mock:
+            service_mock.return_value.list_workspaces.side_effect = [
+                {"Items": []},
+                {"Items": []},
+            ]
+            with self.assertRaisesRegex(ValueError, "Workspace not found"):
+                workspace.delete()
+
+        service_mock.return_value.delete_workspace.assert_not_called()
 
 
 if __name__ == "__main__":

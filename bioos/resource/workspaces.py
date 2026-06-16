@@ -151,6 +151,28 @@ class Workspace(metaclass=SingletonType):
         params = {"ClusterID": cluster_id, "Type": type_, "ID": self._id}
         return Config.service().bind_cluster_to_workspace(params)
 
+    def delete(self) -> dict:
+        """Deletes this workspace by workspace ID or unique workspace name."""
+        params = {"ID": self._resolve_workspace_id_for_delete()}
+        return Config.service().delete_workspace(params)
+
+    def _resolve_workspace_id_for_delete(self) -> str:
+        workspace_infos = Config.service().list_workspaces({
+            "Filter": {
+                "IDs": [self._id]
+            }
+        }).get("Items", [])
+        if len(workspace_infos) == 1:
+            return str(workspace_infos[0].get("ID") or self._id)
+
+        workspace_infos = Config.service().list_workspaces({"PageSize": 0}).get("Items", [])
+        matched = [info for info in workspace_infos if info.get("Name") == self._id]
+        if len(matched) == 1:
+            return str(matched[0].get("ID"))
+        if len(matched) > 1:
+            raise ValueError(f"Multiple workspaces found with name '{self._id}'. Delete by workspace ID instead.")
+        raise ValueError(f"Workspace not found by ID or name: {self._id}")
+
     def list_members(self,
                      filter_: dict = None,
                      page_number: int = None,
