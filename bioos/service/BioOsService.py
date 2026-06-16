@@ -252,6 +252,11 @@ class BioOsService(Service):
                 'Action': 'GetRepositoryPassport',
                 'Version': '2021-03-04'
             }, {}, {}),
+            'SearchDRS':
+            ApiInfo('POST', '/', {
+                'Action': 'SearchDRS',
+                'Version': '2021-03-04'
+            }, {}, {}),
         }
         return api_info
 
@@ -380,6 +385,9 @@ class BioOsService(Service):
 
     def get_repository_passport(self, params):
         return self.__request("GetRepositoryPassport", params)
+
+    def search_drs(self, params):
+        return self.__request("SearchDRS", params)
 
     def __request(self, action, params):
         res = self.json(

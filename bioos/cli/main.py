@@ -10,7 +10,6 @@ from bioos.cli import (
     check_ies_status,
     create_iesapp,
     create_workspace_bioos,
-    dataset,
     delete_workspace_members,
     delete_submission,
     download_files_from_workspace,
@@ -30,7 +29,6 @@ from bioos.cli import (
     upload_files_to_workspace,
     usage_metrics,
     update_workspace_members,
-    validate_wdl,
 )
 from bioos.cli.common import add_argument, add_auth_arguments, add_bool_argument, add_output_arguments, run_cli
 from bioos.cli.config_store import EXAMPLE_CONFIG, get_config_path
@@ -50,7 +48,6 @@ def build_parser() -> argparse.ArgumentParser:
     _add_workflow_group(subparsers)
     _add_submission_group(subparsers)
     _add_file_group(subparsers)
-    _add_network_group(subparsers)
     _add_usage_group(subparsers)
     _add_ies_group(subparsers)
     _add_dockstore_group(subparsers)
@@ -373,12 +370,6 @@ def _add_workflow_group(subparsers: Any) -> None:
     submit_parser.set_defaults(_parser=submit_parser, output="text")
     submit_parser.set_defaults(handler=bioos_workflow.handle)
 
-    validate_parser = workflow_subparsers.add_parser("validate", help="Validate a WDL file with womtool.")
-    add_output_arguments(validate_parser)
-    add_argument(validate_parser, "wdl_path", required=True, help="Path to the WDL file.")
-    validate_parser.set_defaults(_parser=validate_parser)
-    validate_parser.set_defaults(handler=validate_wdl.handle)
-
 
 def _add_submission_group(subparsers: Any) -> None:
     submission_parser = subparsers.add_parser("submission", help="Submission commands.")
@@ -489,86 +480,6 @@ def _add_file_group(subparsers: Any) -> None:
     add_bool_argument(download_parser, "flatten", default=False, help_text="Flatten directories during download.")
     download_parser.set_defaults(_parser=download_parser)
     download_parser.set_defaults(handler=download_files_from_workspace.handle)
-
-
-def _add_network_group(subparsers: Any) -> None:
-    network_parser = subparsers.add_parser("network", help="BioOS Network repository commands.")
-    network_subparsers = network_parser.add_subparsers(dest="network_command")
-    network_parser.set_defaults(_parser=network_parser)
-
-    dataset_parser = network_subparsers.add_parser("dataset", help="BioOS Network data set commands.")
-    dataset_parser.set_defaults(_parser=dataset_parser)
-    _add_dataset_subcommands(dataset_parser.add_subparsers(dest="network_dataset_command"))
-
-    drs_parser = network_subparsers.add_parser("drs", help="GA4GH DRS object commands.")
-    add_auth_arguments(drs_parser)
-    add_output_arguments(drs_parser)
-    dataset.add_drs_arguments(drs_parser, required=False)
-    drs_parser.set_defaults(_parser=drs_parser)
-    drs_parser.set_defaults(handler=dataset.handle_drs)
-
-    drs_subparsers = drs_parser.add_subparsers(dest="network_drs_command")
-
-    access_parser = drs_subparsers.add_parser("access", help="Get a GA4GH DRS object access URL.")
-    add_auth_arguments(access_parser)
-    add_output_arguments(access_parser)
-    dataset.add_drs_access_arguments(access_parser)
-    access_parser.set_defaults(_parser=access_parser)
-    access_parser.set_defaults(handler=dataset.handle_drs_access)
-
-    download_parser = drs_subparsers.add_parser("download", help="Download a GA4GH DRS object.")
-    add_auth_arguments(download_parser)
-    add_output_arguments(download_parser)
-    dataset.add_drs_download_arguments(download_parser)
-    download_parser.set_defaults(_parser=download_parser)
-    download_parser.set_defaults(handler=dataset.handle_drs_download)
-
-
-def _add_dataset_subcommands(dataset_subparsers: Any) -> None:
-    list_parser = dataset_subparsers.add_parser("list", help="List BioOS Network data sets.")
-    add_auth_arguments(list_parser)
-    add_output_arguments(list_parser)
-    dataset.add_dataset_list_arguments(list_parser)
-    list_parser.set_defaults(_parser=list_parser)
-    list_parser.set_defaults(handler=dataset.handle_list)
-
-    get_parser = dataset_subparsers.add_parser("get", help="Get one BioOS Network data set.")
-    add_auth_arguments(get_parser)
-    add_output_arguments(get_parser)
-    dataset.add_dataset_get_arguments(get_parser)
-    get_parser.set_defaults(_parser=get_parser)
-    get_parser.set_defaults(handler=dataset.handle_get)
-
-    files_parser = dataset_subparsers.add_parser("files", help="List files under a BioOS Network data set.")
-    add_auth_arguments(files_parser)
-    add_output_arguments(files_parser)
-    dataset.add_dataset_files_arguments(files_parser)
-    files_parser.set_defaults(_parser=files_parser)
-    files_parser.set_defaults(handler=dataset.handle_files)
-
-    file_ids_parser = dataset_subparsers.add_parser("file-ids", help="List file IDs under a BioOS Network data set.")
-    add_auth_arguments(file_ids_parser)
-    add_output_arguments(file_ids_parser)
-    dataset.add_dataset_file_ids_arguments(file_ids_parser)
-    file_ids_parser.set_defaults(_parser=file_ids_parser)
-    file_ids_parser.set_defaults(handler=dataset.handle_file_ids)
-
-    download_files_parser = dataset_subparsers.add_parser(
-        "download-files",
-        help="Download files under a BioOS Network data set.",
-    )
-    add_auth_arguments(download_files_parser)
-    add_output_arguments(download_files_parser)
-    dataset.add_dataset_download_files_arguments(download_files_parser)
-    download_files_parser.set_defaults(_parser=download_files_parser)
-    download_files_parser.set_defaults(handler=dataset.handle_download_files)
-
-    drs_parser = dataset_subparsers.add_parser("drs", help="Get GA4GH DRS object information.")
-    add_auth_arguments(drs_parser)
-    add_output_arguments(drs_parser)
-    dataset.add_drs_arguments(drs_parser)
-    drs_parser.set_defaults(_parser=drs_parser)
-    drs_parser.set_defaults(handler=dataset.handle_drs)
 
 
 def _add_ies_group(subparsers: Any) -> None:

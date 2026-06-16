@@ -11,7 +11,6 @@ EXAMPLE_CONFIG = """client:
   serveraddr: "https://bio-top.miracle.ac.cn"
   region: "cn-north-1"
   repository_endpoint: "https://network.miracle.ac.cn"
-  drs_endpoint: "http://imc-drs.miracle.ac.cn"
 """
 
 

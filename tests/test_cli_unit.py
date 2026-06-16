@@ -13,7 +13,6 @@ from bioos.cli import (
     check_ies_status,
     create_iesapp,
     create_workspace_bioos,
-    dataset,
     delete_workspace_members,
     delete_submission,
     download_files_from_workspace,
@@ -34,10 +33,10 @@ from bioos.cli import (
     upload_files_to_workspace,
     usage_metrics,
     update_workspace_members,
-    validate_wdl,
 )
 from bioos import bioos_workflow, bw_import, bw_import_status_check, bw_status_check, get_submission_logs as submission_logs_module
 from bioos.ops import auth as auth_ops
+from network.cli import main as network_cli
 
 
 class TestCliHandlers(unittest.TestCase):
@@ -115,245 +114,6 @@ class TestCliHandlers(unittest.TestCase):
             result = list_files_from_workspace.handle(args)
         ws.files.list.assert_called_once_with(prefix="analysis/", recursive=True)
         self.assertEqual(result, [{"key": "a.txt"}])
-
-    def test_dataset_list_handle(self):
-        args = SimpleNamespace(
-            page=1,
-            size=10,
-            order_by="createTime:desc",
-            search_word="rna",
-            data_library_id="lib1",
-            id=["ds1", "ds2"],
-            access_control=None,
-            project_data_type=["omics"],
-            category=["rna"],
-            user_id=None,
-            catalogue=None,
-            display_level="Full",
-            group=None,
-            data_file_id=None,
-            ak="ak",
-            sk="sk",
-            endpoint="ep",
-        )
-        resource = MagicMock()
-        fake_df = MagicMock()
-        network = MagicMock()
-        network.datasets.list.return_value = fake_df
-        with patch("bioos.cli.dataset.login_with_args"), \
-                patch("bioos.bioos.network", return_value=network), \
-                patch("bioos.cli.dataset.dataframe_records", return_value=[{"id": "ds1"}]):
-            result = dataset.handle_list(args)
-
-        self.assertEqual(result, [{"id": "ds1"}])
-        network.datasets.list.assert_called_once_with(
-            page=1,
-            size=10,
-            order_by="createTime:desc",
-            search_word="rna",
-            data_library_id="lib1",
-            ids=["ds1", "ds2"],
-            access_control=None,
-            project_data_type=["omics"],
-            category=["rna"],
-            user_id=None,
-            catalogue=None,
-            display_level="Full",
-            group=None,
-            data_file_id=None,
-        )
-
-    def test_dataset_get_handle(self):
-        args = SimpleNamespace(
-            data_set_id="ds1",
-            data_library_id="lib1",
-            display_level="Full",
-            ak="ak",
-            sk="sk",
-            endpoint="ep",
-        )
-        data_set = MagicMock()
-        data_set.get.return_value = {"id": "ds1"}
-        network = MagicMock()
-        network.dataset.return_value = data_set
-        with patch("bioos.cli.dataset.login_with_args"), \
-                patch("bioos.bioos.network", return_value=network):
-            result = dataset.handle_get(args)
-
-        self.assertEqual(result, {"id": "ds1"})
-        network.dataset.assert_called_once_with("ds1", data_library_id="lib1")
-        data_set.get.assert_called_once_with(display_level="Full")
-
-    def test_dataset_files_handle(self):
-        args = SimpleNamespace(
-            data_set_id="ds1",
-            data_library_id="lib1",
-            page=1,
-            size=20,
-            order_by="fileSize:desc",
-            search_scope=["name", "drs_url"],
-            search_word="bam",
-            time_search_scope="create_time",
-            start_time=1,
-            end_time=2,
-            id=["file1"],
-            file_type=["bam"],
-            ak="ak",
-            sk="sk",
-            endpoint="ep",
-        )
-        data_set = MagicMock()
-        fake_df = MagicMock()
-        data_set.files.return_value = fake_df
-        network = MagicMock()
-        network.dataset.return_value = data_set
-        with patch("bioos.cli.dataset.login_with_args"), \
-                patch("bioos.bioos.network", return_value=network), \
-                patch("bioos.cli.dataset.dataframe_records", return_value=[{"id": "file1"}]):
-            result = dataset.handle_files(args)
-
-        self.assertEqual(result, [{"id": "file1"}])
-        network.dataset.assert_called_once_with("ds1", data_library_id="lib1")
-        data_set.files.assert_called_once_with(
-            page=1,
-            size=20,
-            order_by="fileSize:desc",
-            search_scope=["name", "drs_url"],
-            search_word="bam",
-            time_search_scope="create_time",
-            start_time=1,
-            end_time=2,
-            ids=["file1"],
-            file_type=["bam"],
-        )
-
-    def test_dataset_file_ids_handle(self):
-        args = SimpleNamespace(
-            data_set_id="ds1",
-            data_library_id="lib1",
-            search_scope=["name"],
-            search_word="fastq",
-            time_search_scope="create_time",
-            start_time=1,
-            end_time=2,
-            id=["file1"],
-            file_type=["fastq"],
-            ak="ak",
-            sk="sk",
-            endpoint="ep",
-        )
-        data_set = MagicMock()
-        data_set.file_ids.return_value = ["file1"]
-        network = MagicMock()
-        network.dataset.return_value = data_set
-        with patch("bioos.cli.dataset.login_with_args"), \
-                patch("bioos.bioos.network", return_value=network):
-            result = dataset.handle_file_ids(args)
-
-        self.assertEqual(result, {"ids": ["file1"]})
-        data_set.file_ids.assert_called_once_with(
-            search_scope=["name"],
-            search_word="fastq",
-            time_search_scope="create_time",
-            start_time=1,
-            end_time=2,
-            ids=["file1"],
-            file_type=["fastq"],
-        )
-
-    def test_dataset_download_files_handle(self):
-        args = SimpleNamespace(
-            data_set_id="ds1",
-            data_library_id="lib1",
-            target="/tmp/downloads",
-            access_id="https",
-            overwrite=True,
-            continue_on_error=True,
-            page=1,
-            size=20,
-            order_by="name:asc",
-            search_scope=["name"],
-            search_word="fastq",
-            time_search_scope=None,
-            start_time=None,
-            end_time=None,
-            id=["file1"],
-            file_type=["fastq"],
-            ak="ak",
-            sk="sk",
-            endpoint="ep",
-        )
-        data_set = MagicMock()
-        data_set.download_files.return_value = {"success": True}
-        network = MagicMock()
-        network.dataset.return_value = data_set
-        with patch("bioos.cli.dataset.login_with_args"), \
-                patch("bioos.bioos.network", return_value=network):
-            result = dataset.handle_download_files(args)
-
-        self.assertEqual(result, {"success": True})
-        data_set.download_files.assert_called_once_with(
-            target="/tmp/downloads",
-            access_id="https",
-            overwrite=True,
-            continue_on_error=True,
-            page=1,
-            size=20,
-            order_by="name:asc",
-            search_scope=["name"],
-            search_word="fastq",
-            time_search_scope=None,
-            start_time=None,
-            end_time=None,
-            ids=["file1"],
-            file_type=["fastq"],
-        )
-
-    def test_dataset_drs_handle(self):
-        args = SimpleNamespace(object_id="object-1", ak="ak", sk="sk", endpoint="ep")
-        network = MagicMock()
-        network.drs_object.return_value = {"id": "object-1"}
-        with patch("bioos.cli.dataset.login_with_args"), \
-                patch("bioos.bioos.network", return_value=network):
-            result = dataset.handle_drs(args)
-
-        self.assertEqual(result, {"id": "object-1"})
-        network.drs_object.assert_called_once_with("object-1")
-
-    def test_dataset_drs_access_handle(self):
-        args = SimpleNamespace(object_id="object-1", access_id="https", ak="ak", sk="sk", endpoint="ep")
-        network = MagicMock()
-        network.drs_access.return_value = {"url": "https://download"}
-        with patch("bioos.cli.dataset.login_with_args"), \
-                patch("bioos.bioos.network", return_value=network):
-            result = dataset.handle_drs_access(args)
-
-        self.assertEqual(result, {"url": "https://download"})
-        network.drs_access.assert_called_once_with("object-1", access_id="https")
-
-    def test_dataset_drs_download_handle(self):
-        args = SimpleNamespace(
-            object_id="object-1",
-            access_id="https",
-            target="/tmp/object.txt",
-            overwrite=True,
-            ak="ak",
-            sk="sk",
-            endpoint="ep",
-        )
-        network = MagicMock()
-        network.download_drs_object.return_value = {"success": True}
-        with patch("bioos.cli.dataset.login_with_args"), \
-                patch("bioos.bioos.network", return_value=network):
-            result = dataset.handle_drs_download(args)
-
-        self.assertEqual(result, {"success": True})
-        network.download_drs_object.assert_called_once_with(
-            "object-1",
-            target="/tmp/object.txt",
-            access_id="https",
-            overwrite=True,
-        )
 
     def test_download_files_from_workspace_handle(self):
         args = SimpleNamespace(workspace_name="ws", source=["a.txt", "b.txt"], target="/tmp/out", flatten=True)
@@ -462,13 +222,6 @@ class TestCliHandlers(unittest.TestCase):
         options = mocked.call_args.args[0]
         self.assertEqual(options.workspace_name, "ws")
         self.assertFalse(options.include_failure_details)
-
-    def test_validate_wdl_handle(self):
-        args = SimpleNamespace(wdl_path="test.wdl")
-        with patch("bioos.cli.validate_wdl.validate_wdl_file", return_value={"success": True}) as mocked:
-            result = validate_wdl.handle(args)
-        mocked.assert_called_once_with("test.wdl")
-        self.assertEqual(result["success"], True)
 
     def test_delete_submission_handle(self):
         args = SimpleNamespace(workspace_name="ws", submission_id="sub1")
@@ -849,145 +602,9 @@ class TestCliRootAndAuth(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         mocked.assert_called_once()
 
-    def test_root_network_dataset_list_dispatches_to_existing_handler(self):
-        with patch("bioos.cli.dataset.handle_list", return_value=[{"id": "ds1"}]) as mocked:
-            exit_code = cli_main.main(
-                [
-                    "network",
-                    "dataset",
-                    "list",
-                    "--id",
-                    "ds1",
-                    "--output",
-                    "json",
-                ]
-            )
-
-        self.assertEqual(exit_code, 0)
-        mocked.assert_called_once()
-
-    def test_root_network_dataset_get_dispatches_to_existing_handler(self):
-        with patch("bioos.cli.dataset.handle_get", return_value={"id": "ds1"}) as mocked:
-            exit_code = cli_main.main(
-                [
-                    "network",
-                    "dataset",
-                    "get",
-                    "--data-set-id",
-                    "ds1",
-                    "--output",
-                    "json",
-                ]
-            )
-
-        self.assertEqual(exit_code, 0)
-        mocked.assert_called_once()
-
-    def test_root_network_dataset_files_dispatches_to_existing_handler(self):
-        with patch("bioos.cli.dataset.handle_files", return_value=[{"id": "file1"}]) as mocked:
-            exit_code = cli_main.main(
-                [
-                    "network",
-                    "dataset",
-                    "files",
-                    "--data-set-id",
-                    "ds1",
-                    "--data-library-id",
-                    "lib1",
-                    "--output",
-                    "json",
-                ]
-            )
-
-        self.assertEqual(exit_code, 0)
-        mocked.assert_called_once()
-
-    def test_root_network_dataset_file_ids_dispatches_to_existing_handler(self):
-        with patch("bioos.cli.dataset.handle_file_ids", return_value={"ids": ["file1"]}) as mocked:
-            exit_code = cli_main.main(
-                [
-                    "network",
-                    "dataset",
-                    "file-ids",
-                    "--data-set-id",
-                    "ds1",
-                    "--data-library-id",
-                    "lib1",
-                    "--output",
-                    "json",
-                ]
-            )
-
-        self.assertEqual(exit_code, 0)
-        mocked.assert_called_once()
-
-    def test_root_network_dataset_download_files_dispatches_to_existing_handler(self):
-        with patch("bioos.cli.dataset.handle_download_files", return_value={"success": True}) as mocked:
-            exit_code = cli_main.main(
-                [
-                    "network",
-                    "dataset",
-                    "download-files",
-                    "--data-set-id",
-                    "ds1",
-                    "--data-library-id",
-                    "lib1",
-                    "--target",
-                    "/tmp/downloads",
-                    "--output",
-                    "json",
-                ]
-            )
-
-        self.assertEqual(exit_code, 0)
-        mocked.assert_called_once()
-
-    def test_root_network_drs_dispatches_to_existing_handler(self):
-        with patch("bioos.cli.dataset.handle_drs", return_value={"id": "object-1"}) as mocked:
-            exit_code = cli_main.main(
-                ["network", "drs", "--object-id", "object-1", "--output", "json"]
-            )
-
-        self.assertEqual(exit_code, 0)
-        mocked.assert_called_once()
-
-    def test_root_network_drs_access_dispatches_to_existing_handler(self):
-        with patch("bioos.cli.dataset.handle_drs_access", return_value={"url": "https://download"}) as mocked:
-            exit_code = cli_main.main(
-                [
-                    "network",
-                    "drs",
-                    "access",
-                    "--object-id",
-                    "object-1",
-                    "--access-id",
-                    "https",
-                    "--output",
-                    "json",
-                ]
-            )
-
-        self.assertEqual(exit_code, 0)
-        mocked.assert_called_once()
-
-    def test_root_network_drs_download_dispatches_to_existing_handler(self):
-        with patch("bioos.cli.dataset.handle_drs_download", return_value={"success": True}) as mocked:
-            exit_code = cli_main.main(
-                [
-                    "network",
-                    "drs",
-                    "download",
-                    "--object-id",
-                    "object-1",
-                    "--target",
-                    "/tmp/object.txt",
-                    "--output",
-                    "json",
-                ]
-            )
-
-        self.assertEqual(exit_code, 0)
-        mocked.assert_called_once()
+    def test_bioos_root_does_not_accept_network_group(self):
+        with self.assertRaises(SystemExit):
+            cli_main.main(["network", "dataset", "list"])
 
     def test_root_config_path_returns_success(self):
         exit_code = cli_main.main(["config", "path", "--output", "json"])
@@ -1077,12 +694,13 @@ class TestCliRootAndAuth(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         mocked.assert_called_once()
 
-    def test_root_workflow_validate_dispatches_to_existing_handler(self):
-        with patch("bioos.cli.validate_wdl.handle", return_value={"success": True}) as mocked:
-            exit_code = cli_main.main(["workflow", "validate", "--wdl-path", "test.wdl", "--output", "json"])
+    def test_root_workflow_validate_is_not_registered(self):
+        parser = cli_main.build_parser()
+        command_action = next(action for action in parser._actions if action.dest == "command")
+        workflow_parser = command_action.choices["workflow"]
+        workflow_action = next(action for action in workflow_parser._actions if action.dest == "workflow_command")
 
-        self.assertEqual(exit_code, 0)
-        mocked.assert_called_once()
+        self.assertNotIn("validate", workflow_action.choices)
 
     def test_root_submission_list_dispatches_to_existing_handler(self):
         with patch("bioos.cli.list_submissions_from_workspace.handle", return_value=[{"ID": "sub1"}]) as mocked:
@@ -1710,6 +1328,238 @@ class TestCliRootAndAuth(unittest.TestCase):
 
         self.assertEqual(exit_code, 0)
         mocked.assert_called_once()
+
+
+class TestNetworkCliRoot(unittest.TestCase):
+    def test_network_library_list_dispatches_to_network_sdk(self):
+        fake_df = MagicMock()
+        fake_df.to_dict.return_value = [{"id": "lib1"}]
+
+        with patch("network.cli.main._login_with_args") as login_mock, \
+                patch("network.cli.main.network.libraries") as libraries_mock:
+            libraries_mock.return_value.list.return_value = fake_df
+            exit_code = network_cli.main(
+                ["library", "list", "--id", "lib1", "--repository-endpoint", "https://repo", "--output", "json"]
+            )
+
+        self.assertEqual(exit_code, 0)
+        login_mock.assert_called_once()
+        libraries_mock.assert_called_once_with(repository_endpoint="https://repo")
+        libraries_mock.return_value.list.assert_called_once_with(
+            page=None,
+            size=None,
+            order_by=None,
+            ids=["lib1"],
+            display_name=None,
+            organization_id=None,
+        )
+
+    def test_network_library_list_mine_dispatches_to_user_libraries(self):
+        fake_df = MagicMock()
+        fake_df.to_dict.return_value = [{"id": "lib1"}]
+
+        with patch("network.cli.main._login_with_args"), \
+                patch("network.cli.main.network.libraries") as libraries_mock:
+            libraries_mock.return_value.user.return_value = fake_df
+            exit_code = network_cli.main(
+                ["library", "list", "--mine", "--size", "2", "--output", "json"]
+            )
+
+        self.assertEqual(exit_code, 0)
+        libraries_mock.return_value.user.assert_called_once_with(
+            page=None,
+            size=2,
+            order_by=None,
+        )
+        libraries_mock.return_value.list.assert_not_called()
+
+    def test_network_dataset_list_dispatches_to_network_sdk(self):
+        fake_df = MagicMock()
+        fake_df.to_dict.return_value = [{"id": "ds1"}]
+
+        with patch("network.cli.main._login_with_args"), \
+                patch("network.cli.main.network.datasets") as datasets_mock:
+            datasets_mock.return_value.list.return_value = fake_df
+            exit_code = network_cli.main(
+                [
+                    "dataset",
+                    "list",
+                    "--id",
+                    "ds1",
+                    "--data-library-id",
+                    "lib1",
+                    "--output",
+                    "json",
+                ]
+            )
+
+        self.assertEqual(exit_code, 0)
+        datasets_mock.return_value.list.assert_called_once()
+        self.assertEqual(datasets_mock.return_value.list.call_args.kwargs["ids"], ["ds1"])
+        self.assertEqual(datasets_mock.return_value.list.call_args.kwargs["data_library_id"], "lib1")
+
+    def test_network_dataset_list_mine_uses_current_network_user(self):
+        fake_df = MagicMock()
+        fake_df.to_dict.return_value = [{"id": "ds1"}]
+
+        with patch("network.cli.main._login_with_args"), \
+                patch("network.cli.main.network.current_user_id", return_value="user-1"), \
+                patch("network.cli.main.network.datasets") as datasets_mock:
+            datasets_mock.return_value.list.return_value = fake_df
+            exit_code = network_cli.main(
+                ["dataset", "list", "--mine", "--data-library-id", "lib1", "--output", "json"]
+            )
+
+        self.assertEqual(exit_code, 0)
+        datasets_mock.return_value.list.assert_called_once()
+        self.assertEqual(datasets_mock.return_value.list.call_args.kwargs["user_id"], "user-1")
+        self.assertEqual(datasets_mock.return_value.list.call_args.kwargs["data_library_id"], "lib1")
+
+    def test_network_dataset_get_mine_uses_current_network_user(self):
+        with patch("network.cli.main._login_with_args"), \
+                patch("network.cli.main.network.current_user_id", return_value="user-1"), \
+                patch("network.cli.main.network.dataset") as dataset_mock:
+            dataset_mock.return_value.get.return_value = {"id": "ds1"}
+            exit_code = network_cli.main(
+                ["dataset", "get", "--data-set-id", "ds1", "--mine", "--output", "json"]
+            )
+
+        self.assertEqual(exit_code, 0)
+        dataset_mock.return_value.get.assert_called_once_with(
+            display_level="Full",
+            user_id="user-1",
+        )
+
+    def test_network_library_dataset_list_mine_uses_current_network_user(self):
+        fake_df = MagicMock()
+        fake_df.to_dict.return_value = [{"id": "ds1"}]
+
+        with patch("network.cli.main._login_with_args"), \
+                patch("network.cli.main.network.current_user_id", return_value="user-1"), \
+                patch("network.cli.main.network.library") as library_mock:
+            library_mock.return_value.datasets.list.return_value = fake_df
+            exit_code = network_cli.main(
+                [
+                    "library",
+                    "dataset",
+                    "list",
+                    "--data-library-id",
+                    "lib1",
+                    "--mine",
+                    "--output",
+                    "json",
+                ]
+            )
+
+        self.assertEqual(exit_code, 0)
+        library_mock.assert_called_once_with("lib1", repository_endpoint=None)
+        library_mock.return_value.datasets.list.assert_called_once()
+        self.assertEqual(library_mock.return_value.datasets.list.call_args.kwargs["user_id"], "user-1")
+
+    def test_network_library_dataset_files_dispatches_to_library_context(self):
+        fake_df = MagicMock()
+        fake_df.to_dict.return_value = [{"id": "file1"}]
+
+        with patch("network.cli.main._login_with_args"), \
+                patch("network.cli.main.network.library") as library_mock:
+            library_mock.return_value.dataset.return_value.files.return_value = fake_df
+            exit_code = network_cli.main(
+                [
+                    "library",
+                    "dataset",
+                    "files",
+                    "--data-library-id",
+                    "lib1",
+                    "--data-set-id",
+                    "ds1",
+                    "--search-scope",
+                    "name",
+                    "--output",
+                    "json",
+                ]
+            )
+
+        self.assertEqual(exit_code, 0)
+        library_mock.assert_called_once_with("lib1", repository_endpoint=None)
+        library_mock.return_value.dataset.assert_called_once_with("ds1")
+        library_mock.return_value.dataset.return_value.files.assert_called_once()
+        self.assertEqual(
+            library_mock.return_value.dataset.return_value.files.call_args.kwargs["search_scope"],
+            ["name"],
+        )
+
+    def test_network_drs_access_dispatches_to_network_sdk(self):
+        with patch("network.cli.main._login_with_args"), \
+                patch("network.cli.main.network.network") as network_factory:
+            network_factory.return_value.drs_access.return_value = {"url": "https://download"}
+            exit_code = network_cli.main(
+                [
+                    "drs",
+                    "access",
+                    "--object-id",
+                    "drs://drs.example/object-1",
+                    "--access-id",
+                    "https",
+                    "--output",
+                    "json",
+                ]
+            )
+
+        self.assertEqual(exit_code, 0)
+        network_factory.return_value.drs_access.assert_called_once_with(
+            "drs://drs.example/object-1",
+            access_id="https",
+        )
+
+    def test_network_drs_get_dispatches_to_network_sdk(self):
+        with patch("network.cli.main._login_with_args"), \
+                patch("network.cli.main.network.network") as network_factory:
+            network_factory.return_value.drs_object.return_value = {"id": "object-1"}
+            exit_code = network_cli.main(
+                [
+                    "drs",
+                    "get",
+                    "--object-id",
+                    "drs://drs.example/object-1",
+                    "--repository-endpoint",
+                    "https://network.example",
+                    "--output",
+                    "json",
+                ]
+            )
+
+        self.assertEqual(exit_code, 0)
+        network_factory.assert_called_once_with(repository_endpoint="https://network.example")
+        network_factory.return_value.drs_object.assert_called_once_with("drs://drs.example/object-1")
+
+    def test_network_drs_locate_dispatches_to_network_sdk(self):
+        with patch("network.cli.main._login_with_args"), \
+                patch("network.cli.main.network.network") as network_factory:
+            network_factory.return_value.drs_locate.return_value = {
+                "DataSetID": "ds1",
+                "WebEndpoint": "https://library.example",
+            }
+            exit_code = network_cli.main(
+                [
+                    "drs",
+                    "locate",
+                    "--drs-path",
+                    "drs://drs.example/object-1",
+                    "--output",
+                    "json",
+                ]
+            )
+
+        self.assertEqual(exit_code, 0)
+        network_factory.return_value.drs_locate.assert_called_once_with("drs://drs.example/object-1")
+
+    def test_network_dataset_group_does_not_expose_drs_subcommand(self):
+        parser = network_cli.build_parser()
+        command_action = next(action for action in parser._actions if action.dest == "command")
+        dataset_parser = command_action.choices["dataset"]
+        dataset_action = next(action for action in dataset_parser._actions if action.dest == "dataset_command")
+
+        self.assertNotIn("drs", dataset_action.choices)
 
 
 if __name__ == "__main__":

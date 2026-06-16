@@ -29,6 +29,7 @@ setup(
     entry_points={
         'console_scripts': [
             'bioos=bioos.cli.main:main',
+            'network=network.cli.main:main',
             'bw=bioos.bioos_workflow:bioos_workflow',
             'bw_import=bioos.bw_import:bioos_workflow_import',
             'bw_import_status_check=bioos.bw_import_status_check:bioos_workflow_status_check',
