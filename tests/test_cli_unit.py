@@ -13,6 +13,7 @@ from bioos.cli import (
     check_ies_status,
     create_iesapp,
     create_workspace_bioos,
+    delete_workspace,
     delete_workspace_members,
     delete_submission,
     download_files_from_workspace,
@@ -104,6 +105,19 @@ class TestCliHandlers(unittest.TestCase):
         create_mock.assert_called_once_with(name="new", description="desc")
         self.assertTrue(result["success"])
         self.assertEqual(ws.bind_cluster.call_count, 2)
+
+    def test_delete_workspace_handle(self):
+        args = SimpleNamespace(workspace_name="ws-or-id", ak="ak", sk="sk", endpoint="ep")
+        ws = MagicMock()
+        ws.delete.return_value = {}
+        with patch("bioos.cli.delete_workspace.login_with_args"), \
+                patch("bioos.bioos.workspace", return_value=ws) as workspace_mock:
+            result = delete_workspace.handle(args)
+        workspace_mock.assert_called_once_with("ws-or-id")
+        ws.delete.assert_called_once_with()
+        self.assertTrue(result["success"])
+        self.assertEqual(result["workspace_name"], "ws-or-id")
+        self.assertEqual(result["result"], {})
 
     def test_list_files_from_workspace_handle(self):
         args = SimpleNamespace(workspace_name="ws", prefix="analysis/", recursive=True)
@@ -452,6 +466,15 @@ class TestCliRootAndAuth(unittest.TestCase):
     def test_root_workspace_list_dispatches_to_existing_handler(self):
         with patch("bioos.cli.list_bioos_workspaces.handle", return_value=[{"Name": "ws1"}]) as mocked:
             exit_code = cli_main.main(["workspace", "list", "--output", "json"])
+
+        self.assertEqual(exit_code, 0)
+        mocked.assert_called_once()
+
+    def test_root_workspace_delete_dispatches_to_existing_handler(self):
+        with patch("bioos.cli.delete_workspace.handle", return_value={"success": True}) as mocked:
+            exit_code = cli_main.main(
+                ["workspace", "delete", "--workspace-name", "ws-or-id", "--output", "json"]
+            )
 
         self.assertEqual(exit_code, 0)
         mocked.assert_called_once()

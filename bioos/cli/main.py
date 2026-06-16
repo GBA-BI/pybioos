@@ -10,6 +10,7 @@ from bioos.cli import (
     check_ies_status,
     create_iesapp,
     create_workspace_bioos,
+    delete_workspace,
     delete_workspace_members,
     delete_submission,
     download_files_from_workspace,
@@ -121,6 +122,13 @@ def _add_workspace_group(subparsers: Any) -> None:
     add_argument(create_parser, "workspace_description", required=True, help="Workspace description.")
     create_parser.set_defaults(_parser=create_parser)
     create_parser.set_defaults(handler=create_workspace_bioos.handle)
+
+    delete_parser = workspace_subparsers.add_parser("delete", help="Delete a Bio-OS workspace.")
+    add_auth_arguments(delete_parser)
+    add_output_arguments(delete_parser)
+    add_argument(delete_parser, "workspace_name", required=True, help="Workspace name or ID.")
+    delete_parser.set_defaults(_parser=delete_parser)
+    delete_parser.set_defaults(handler=delete_workspace.handle)
 
     export_parser = workspace_subparsers.add_parser("export", help="Export workspace metadata to a local path.")
     add_auth_arguments(export_parser)
