@@ -340,6 +340,7 @@ Current workspace commands:
 
 - `bioos workspace list`
 - `bioos workspace create`
+- `bioos workspace delete`
 - `bioos workspace export`
 - `bioos workspace profile`
 - `bioos workspace dashboard-upload`
@@ -427,6 +428,13 @@ Compared with the earlier implementation, the current behavior is more robust:
 This preprocessing path reuses the same resilient upload helper as `bioos file upload`.
 
 ## Workspace Member Management
+
+Delete a workspace by workspace name or ID:
+
+```bash
+bioos workspace delete \
+  --workspace-name my-workspace
+```
 
 Workspace member operations are available under `bioos workspace member`.
 
