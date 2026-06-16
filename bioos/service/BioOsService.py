@@ -52,6 +52,11 @@ class BioOsService(Service):
                 'Action': 'CreateWorkspace',
                 'Version': '2021-03-04'
             }, {}, {}),
+            'DeleteWorkspace':
+            ApiInfo('POST', '/', {
+                'Action': 'DeleteWorkspace',
+                'Version': '2021-03-04'
+            }, {}, {}),
             'AddMembers':
             ApiInfo('POST', '/', {
                 'Action': 'AddMembers',
@@ -265,6 +270,9 @@ class BioOsService(Service):
 
     def create_workspace(self, params):
         return self.__request('CreateWorkspace', params)
+
+    def delete_workspace(self, params):
+        return self.__request('DeleteWorkspace', params)
 
     def add_members(self, params):
         return self.__request('AddMembers', params)
