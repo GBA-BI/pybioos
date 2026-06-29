@@ -196,14 +196,16 @@ List workspace files:
 bioos file list --workspace-name my-workspace --recursive
 ```
 
-Upload local files to a workspace:
+Upload local files or directories to a workspace:
 
 ```bash
 bioos file upload \
   --workspace-name my-workspace \
   --source ./inputs/sample1.fastq.gz \
   --source ./inputs/sample2.fastq.gz \
+  --source ./references \
   --target input_provision/ \
+  --no-flatten \
   --skip-existing
 ```
 
@@ -370,11 +372,12 @@ Current usage commands:
 
 ### Upload
 
-`bioos file upload` uploads one or more local files into the current workspace bucket.
+`bioos file upload` uploads one or more local files or directories into the current workspace bucket.
 
 Key capabilities:
 
 - multiple `--source` inputs in one command
+- recursive directory upload
 - multipart upload for large files
 - resumable uploads with checkpoint files
 - per-file retry controls
@@ -386,8 +389,9 @@ Example:
 ```bash
 bioos file upload \
   --workspace-name my-workspace \
-  --source ./data/sample.bam \
+  --source ./data \
   --target input_provision/ \
+  --no-flatten \
   --checkpoint-dir ~/.bioos/upload-checkpoints \
   --max-retries 3 \
   --task-num 10
@@ -396,13 +400,17 @@ bioos file upload \
 Available upload options:
 
 - `--workspace-name`: target workspace name
-- `--source`: local file path, can be repeated
+- `--source`: local file or directory path, can be repeated
 - `--target`: target prefix in the workspace bucket
 - `--flatten/--no-flatten`: control whether local directory structure is preserved
 - `--skip-existing`: skip upload when the target key already exists
 - `--checkpoint-dir`: checkpoint directory for resumable multipart uploads
 - `--max-retries`: retry count per file after the first attempt
 - `--task-num`: multipart parallel task count
+
+When uploading directories, `--no-flatten` preserves the uploaded directory tree under
+the target prefix. `--flatten` uploads every file to the target prefix by basename and
+fails fast if multiple local files would map to the same target key.
 
 ### Download
 
@@ -505,7 +513,7 @@ Notes:
 
 ## Current Limitations
 
-- directory upload is not supported yet; `bioos file upload` currently accepts files, not whole directories
+- uploading empty directories creates no objects because workspace storage is object-based
 - `bioos file download` does not yet support direct signed `https://...` download URLs
 - usage commands depend on backend permissions; owner-only APIs require the main account AK/SK
 

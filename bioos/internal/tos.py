@@ -2,7 +2,7 @@ import hashlib
 import math
 import os
 import re
-from typing import List
+from typing import Dict, List
 
 import tos
 from tos import DataTransferType, HttpMethodType
@@ -93,6 +93,90 @@ class TOSHandler:
             to_upload_path = to_upload_path.lstrip("/")
 
         return os.path.normpath(os.path.join(target_path, to_upload_path))
+
+    def _passes_file_filter(self,
+                            file_path: str,
+                            include: str = "",
+                            ignore: str = "") -> bool:
+        basename = os.path.basename(os.path.normpath(file_path))
+        if include != "":
+            return re.fullmatch(include, basename) is not None and not (
+                ignore != "" and re.fullmatch(ignore, basename))
+        return not (ignore != "" and re.fullmatch(ignore, basename))
+
+    def _iter_directory_upload_files(self, directory_path: str) -> List[str]:
+        files_to_upload = []
+        for root, dirs, filenames in os.walk(directory_path):
+            dirs[:] = sorted(dirs)
+            for filename in sorted(filenames):
+                file_path = os.path.normpath(os.path.join(root, filename))
+                if os.path.isfile(file_path):
+                    files_to_upload.append(file_path)
+        return files_to_upload
+
+    def _directory_upload_key_source(self,
+                                     directory_path: str,
+                                     file_path: str,
+                                     flatten: bool) -> str:
+        if flatten:
+            return file_path
+
+        relative_file_path = os.path.relpath(file_path, directory_path)
+        if os.path.isabs(directory_path):
+            directory_prefix = os.path.basename(directory_path)
+        else:
+            directory_prefix = directory_path
+        return os.path.normpath(os.path.join(directory_prefix,
+                                             relative_file_path))
+
+    def build_upload_plan(
+        self,
+        files_to_upload: List[str],
+        target_path: str,
+        flatten: bool,
+        ignore: str = "",
+        include: str = "",
+    ) -> List[Dict[str, object]]:
+        upload_plan = []
+        normalized_sources = [
+            os.path.normpath(os.path.expanduser(str(file_path)))
+            for file_path in files_to_upload
+        ]
+
+        for source in normalized_sources:
+            if os.path.isdir(source):
+                for file_path in self._iter_directory_upload_files(source):
+                    if not self._passes_file_filter(file_path, include, ignore):
+                        continue
+                    key_source = self._directory_upload_key_source(
+                        source, file_path, flatten)
+                    upload_plan.append({
+                        "source": file_path,
+                        "key": self._resolve_upload_key(key_source, target_path, flatten),
+                        "from_directory": True,
+                    })
+                continue
+
+            if not self._passes_file_filter(source, include, ignore):
+                continue
+            upload_plan.append({
+                "source": source,
+                "key": self._resolve_upload_key(source, target_path, flatten),
+                "from_directory": False,
+            })
+
+        return upload_plan
+
+    def upload_key_conflicts(self,
+                             upload_plan: List[Dict[str, object]]) -> Dict[str, List[str]]:
+        key_sources = {}
+        for item in upload_plan:
+            key_sources.setdefault(str(item["key"]), []).append(str(item["source"]))
+        return {
+            key: sources
+            for key, sources in key_sources.items()
+            if len(sources) > 1
+        }
 
     def _build_upload_checkpoint_file(self,
                                       file_path: str,
@@ -205,13 +289,9 @@ class TOSHandler:
                 cur_marker = resp.next_marker
         return object_list
 
-    def upload_objects(
+    def upload_planned_objects(
         self,
-        files_to_upload: List[str],
-        target_path: str,
-        flatten: bool,
-        ignore: str = "",
-        include: str = "",
+        upload_plan: List[Dict[str, object]],
         checkpoint_dir: str = "",
         max_retries: int = 3,
         task_num: int = DEFAULT_THREAD,
@@ -220,22 +300,21 @@ class TOSHandler:
         def _upload_fail(error_list_: List[str], file_path_: str):
             error_list_.append(file_path_)
 
-        files_to_upload = self.files_filter(files_to_upload, include, ignore)
         max_retries = max(int(max_retries) if max_retries is not None else 3, 0)
         task_num = max(int(task_num) if task_num is not None else DEFAULT_THREAD, 1)
-        if len(files_to_upload) == 0:
+        if len(upload_plan) == 0:
             self._info_logging("no files to upload")
             return []
 
         error_list = []
-        for file_path in files_to_upload:
+        for item in upload_plan:
+            file_path = str(item["source"])
+            tos_target_path = str(item["key"])
             if not os.path.isfile(file_path):
                 error_list.append(file_path)
                 self._error_logging(f"'{file_path}' is not a file")
                 continue
             fsize = os.path.getsize(file_path)
-            tos_target_path = self._resolve_upload_key(file_path, target_path,
-                                                       flatten)
 
             self._info_logging(
                 f"[{file_path}] begins to upload to [{tos_target_path}]")
@@ -265,6 +344,31 @@ class TOSHandler:
                 f"\n{error_list}")
 
         return error_list
+
+    def upload_objects(
+        self,
+        files_to_upload: List[str],
+        target_path: str,
+        flatten: bool,
+        ignore: str = "",
+        include: str = "",
+        checkpoint_dir: str = "",
+        max_retries: int = 3,
+        task_num: int = DEFAULT_THREAD,
+    ) -> List[str]:
+        upload_plan = self.build_upload_plan(
+            files_to_upload=files_to_upload,
+            target_path=target_path,
+            flatten=flatten,
+            ignore=ignore,
+            include=include,
+        )
+        return self.upload_planned_objects(
+            upload_plan=upload_plan,
+            checkpoint_dir=checkpoint_dir,
+            max_retries=max_retries,
+            task_num=task_num,
+        )
 
     def download_objects(self,
                          files_to_download: List[str],
@@ -369,14 +473,8 @@ class TOSHandler:
         for f in files:
             if f.endswith("/"):
                 raise ParameterError("tos files path")
-            basename = os.path.basename(os.path.normpath(f))
-            if include != "":
-                if not re.fullmatch(include, basename) or (
-                        ignore != "" and re.fullmatch(ignore, basename)):
-                    continue
-            else:
-                if ignore != "" and re.fullmatch(ignore, basename):
-                    continue
+            if not self._passes_file_filter(f, include, ignore):
+                continue
 
             file_lst.append(f)
         return file_lst

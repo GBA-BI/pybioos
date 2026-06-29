@@ -25,20 +25,6 @@ def _normalize_local_sources(sources: Union[str, Iterable[str]]) -> List[str]:
     return normalized_sources
 
 
-def _resolve_workspace_upload_key(local_file_path: str,
-                                  target: str,
-                                  flatten: bool) -> str:
-    if flatten:
-        to_upload_path = os.path.basename(local_file_path)
-    else:
-        to_upload_path = os.path.normpath(local_file_path)
-
-    if os.path.isabs(to_upload_path):
-        to_upload_path = to_upload_path.lstrip("/")
-
-    return os.path.normpath(os.path.join(target, to_upload_path))
-
-
 def _upload_local_files_with_workspace(
     ws,
     workspace_id: str,
@@ -58,18 +44,27 @@ def _upload_local_files_with_workspace(
     if missing_files:
         raise FileNotFoundError(f"Local file not found: {missing_files[0]}")
 
-    directory_sources = [source for source in normalized_sources if os.path.isdir(source)]
-    if directory_sources:
-        raise IsADirectoryError(f"Directory upload is not supported yet: {directory_sources[0]}")
-
     resolved_checkpoint_dir = os.path.abspath(
         os.path.expanduser(checkpoint_dir or DEFAULT_UPLOAD_CHECKPOINT_DIR))
 
+    raw_upload_plan = ws.files.tos_handler.build_upload_plan(
+        files_to_upload=normalized_sources,
+        target_path=target,
+        flatten=flatten,
+    )
+    if any(item["from_directory"] for item in raw_upload_plan):
+        conflicts = ws.files.tos_handler.upload_key_conflicts(raw_upload_plan)
+        if conflicts:
+            key = sorted(conflicts.keys())[0]
+            sources = ", ".join(conflicts[key])
+            raise ValueError(
+                f"Multiple local files map to target key '{key}': {sources}")
+
     upload_plan = []
-    for source in normalized_sources:
-        key = _resolve_workspace_upload_key(source, target, flatten)
+    for item in raw_upload_plan:
+        key = item["key"]
         upload_plan.append({
-            "source": source,
+            "source": item["source"],
             "key": key,
             "s3_url": ws.files.s3_urls([key])[0],
         })
@@ -84,10 +79,8 @@ def _upload_local_files_with_workspace(
 
     failed_sources = []
     if pending_uploads:
-        failed_sources = ws.files.tos_handler.upload_objects(
-            files_to_upload=[item["source"] for item in pending_uploads],
-            target_path=target,
-            flatten=flatten,
+        failed_sources = ws.files.tos_handler.upload_planned_objects(
+            upload_plan=pending_uploads,
             checkpoint_dir=resolved_checkpoint_dir,
             max_retries=max_retries,
             task_num=task_num,

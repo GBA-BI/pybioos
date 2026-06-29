@@ -22,9 +22,11 @@ from bioos.cli import (
     get_workspace_profile,
     list_bioos_workspaces,
     list_files_from_workspace,
+    list_ies_apps,
     list_workspace_members,
     list_submissions_from_workspace,
     list_workflows_from_workspace,
+    run as run_commands,
     search_dockstore,
     upload_dashboard_file,
     upload_files_to_workspace,
@@ -48,6 +50,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_workspace_group(subparsers)
     _add_workflow_group(subparsers)
     _add_submission_group(subparsers)
+    _add_run_group(subparsers)
     _add_file_group(subparsers)
     _add_usage_group(subparsers)
     _add_ies_group(subparsers)
@@ -414,6 +417,59 @@ def _add_submission_group(subparsers: Any) -> None:
     logs_parser.set_defaults(handler=get_submission_logs.handle)
 
 
+def _add_run_group(subparsers: Any) -> None:
+    run_parser = subparsers.add_parser("run", help="Workflow run commands.")
+    run_subparsers = run_parser.add_subparsers(dest="run_command")
+    run_parser.set_defaults(_parser=run_parser)
+
+    list_parser = run_subparsers.add_parser("list", help="List runs under a submission.")
+    add_auth_arguments(list_parser)
+    add_output_arguments(list_parser)
+    add_argument(list_parser, "workspace_name", required=True, help="Workspace name.")
+    add_argument(list_parser, "submission_id", required=True, help="Submission ID.")
+    add_argument(list_parser, "page_number", required=False, type=int, default=1, help="Page number.")
+    add_argument(list_parser, "page_size", required=False, type=int, default=10, help="Page size. Use 0 for all.")
+    add_argument(list_parser, "keyword", required=False, default=None, help="Optional run keyword filter.")
+    add_argument(
+        list_parser,
+        "run_id",
+        required=False,
+        action="append",
+        help="Optional run ID filter. Can be specified multiple times.",
+    )
+    add_argument(
+        list_parser,
+        "status",
+        required=False,
+        action="append",
+        help="Optional run status filter. Can be specified multiple times.",
+    )
+    list_parser.set_defaults(_parser=list_parser)
+    list_parser.set_defaults(handler=run_commands.handle_list)
+
+    tasks_parser = run_subparsers.add_parser("tasks", help="List tasks under a run.")
+    add_auth_arguments(tasks_parser)
+    add_output_arguments(tasks_parser)
+    add_argument(tasks_parser, "workspace_name", required=True, help="Workspace name.")
+    add_argument(tasks_parser, "run_id", required=True, help="Run ID.")
+    add_argument(tasks_parser, "page_number", required=False, type=int, default=1, help="Page number.")
+    add_argument(tasks_parser, "page_size", required=False, type=int, default=10, help="Page size. Use 0 for all.")
+    tasks_parser.set_defaults(_parser=tasks_parser)
+    tasks_parser.set_defaults(handler=run_commands.handle_tasks)
+
+    metric_data_parser = run_subparsers.add_parser("metric-data", help="Get task metric data under a run.")
+    add_auth_arguments(metric_data_parser)
+    add_output_arguments(metric_data_parser)
+    add_argument(metric_data_parser, "workspace_name", required=True, help="Workspace name.")
+    add_argument(metric_data_parser, "run_id", required=True, help="Run ID.")
+    add_argument(metric_data_parser, "task_name", required=True, help="Task name.")
+    add_argument(metric_data_parser, "period", required=True, help="Metric interval granularity.")
+    add_argument(metric_data_parser, "start_time", required=True, type=int, help="Start timestamp.")
+    add_argument(metric_data_parser, "end_time", required=True, type=int, help="End timestamp.")
+    metric_data_parser.set_defaults(_parser=metric_data_parser)
+    metric_data_parser.set_defaults(handler=run_commands.handle_metric_data)
+
+
 def _add_file_group(subparsers: Any) -> None:
     file_parser = subparsers.add_parser("file", help="Workspace file commands.")
     file_subparsers = file_parser.add_subparsers(dest="file_command")
@@ -428,10 +484,25 @@ def _add_file_group(subparsers: Any) -> None:
         "source",
         required=True,
         action="append",
-        help="Local file path. Can be specified multiple times.",
+        help=(
+            "Local file or directory path. Repeat this option to upload multiple "
+            "files or directories."
+        ),
     )
     add_argument(upload_parser, "target", required=False, default="", help="Target prefix path in the workspace bucket.")
-    add_bool_argument(upload_parser, "flatten", default=True, help_text="Flatten local paths during upload.")
+    add_bool_argument(
+        upload_parser,
+        "flatten",
+        default=True,
+        help_text=(
+            "Flatten uploaded paths. For directory upload, the default --flatten "
+            "uploads files by basename under target; use --no-flatten to preserve "
+            "the directory tree under target."
+        ),
+        negative_help_text=(
+            "Preserve directory tree under target when uploading directories."
+        ),
+    )
     add_bool_argument(
         upload_parser,
         "skip_existing",
@@ -537,6 +608,13 @@ def _add_ies_group(subparsers: Any) -> None:
     add_bool_argument(create_parser, "ies_auto_start", default=True, help_text="Auto-start the instance.")
     create_parser.set_defaults(_parser=create_parser)
     create_parser.set_defaults(handler=create_iesapp.handle)
+
+    list_parser = ies_subparsers.add_parser("list", help="List IES application instances.")
+    add_auth_arguments(list_parser)
+    add_output_arguments(list_parser)
+    add_argument(list_parser, "workspace_name", required=True, help="Workspace name.")
+    list_parser.set_defaults(_parser=list_parser)
+    list_parser.set_defaults(handler=list_ies_apps.handle)
 
     status_parser = ies_subparsers.add_parser("status", help="Check IES instance status.")
     add_auth_arguments(status_parser)

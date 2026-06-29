@@ -167,6 +167,11 @@ class BioOsService(Service):
                 'Action': 'ListTasks',
                 'Version': '2021-03-04'
             }, {}, {}),
+            'GetTaskMetricData':
+            ApiInfo('POST', '/', {
+                'Action': 'GetTaskMetricData',
+                'Version': '2021-03-04'
+            }, {}, {}),
             'GetTOSAccess':
             ApiInfo('POST', '/', {
                 'Action': 'GetTOSAccess',
@@ -339,6 +344,9 @@ class BioOsService(Service):
 
     def list_tasks(self, params):
         return self.__request('ListTasks', params)
+
+    def get_task_metric_data(self, params):
+        return self.__request('GetTaskMetricData', params)
 
     def get_tos_access(self, params):
         return self.__request('GetTOSAccess', params)

@@ -3,7 +3,7 @@ import json
 import sys
 from datetime import date, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 
 def _json_default(value: Any) -> Any:
@@ -82,6 +82,7 @@ def add_bool_argument(
     name: str,
     default: bool,
     help_text: str,
+    negative_help_text: Optional[str] = None,
 ) -> None:
     cli_name = f"--{name.replace('_', '-')}"
     legacy_name = f"--{name}"
@@ -105,7 +106,7 @@ def add_bool_argument(
             *negative_option_names,
             dest=name,
             action="store_false",
-            help=f"Disable: {help_text}",
+            help=negative_help_text or f"Disable: {help_text}",
         )
 
 

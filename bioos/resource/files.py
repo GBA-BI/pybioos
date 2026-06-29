@@ -288,11 +288,22 @@ class FileResource(metaclass=SingletonType):
         if isinstance(sources, str):
             sources = [sources]
 
+        upload_plan = self.tos_handler.build_upload_plan(
+            files_to_upload=sources,
+            target_path=target,
+            flatten=flatten,
+        )
+        if any(item["from_directory"] for item in upload_plan):
+            conflicts = self.tos_handler.upload_key_conflicts(upload_plan)
+            if conflicts:
+                key = sorted(conflicts.keys())[0]
+                sources = ", ".join(conflicts[key])
+                raise ValueError(
+                    f"Multiple local files map to target key '{key}': {sources}")
+
         return len(
-            self.tos_handler.upload_objects(
-                sources,
-                target,
-                flatten,
+            self.tos_handler.upload_planned_objects(
+                upload_plan=upload_plan,
                 checkpoint_dir=checkpoint_dir,
                 max_retries=max_retries,
                 task_num=task_num if task_num is not None else 10,
