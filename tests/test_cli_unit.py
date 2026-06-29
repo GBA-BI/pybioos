@@ -25,10 +25,12 @@ from bioos.cli import (
     get_workspace_profile,
     list_bioos_workspaces,
     list_files_from_workspace,
+    list_ies_apps,
     list_workspace_members,
     list_submissions_from_workspace,
     list_workflows_from_workspace,
     main as cli_main,
+    run as run_commands,
     search_dockstore,
     upload_dashboard_file,
     upload_files_to_workspace,
@@ -84,6 +86,80 @@ class TestCliHandlers(unittest.TestCase):
             page_size=10,
         )
         self.assertEqual(result, [{"ID": "sub1"}])
+
+    def test_run_list_handle(self):
+        args = SimpleNamespace(
+            workspace_name="ws",
+            submission_id="sid",
+            page_number=2,
+            page_size=50,
+            keyword="kw",
+            run_id=["rid"],
+            status=["Running"],
+            ak="ak",
+            sk="sk",
+            endpoint="ep",
+        )
+        with patch("bioos.cli.run.login_with_args"), \
+                patch("bioos.cli.run.resolve_workspace", return_value=("wid", {})), \
+                patch("bioos.cli.run.Run.list_runs", return_value={"Items": []}) as mocked:
+            result = run_commands.handle_list(args)
+        self.assertEqual(result, {"Items": []})
+        mocked.assert_called_once_with(
+            workspace_id="wid",
+            submission_id="sid",
+            page_number=2,
+            page_size=50,
+            filter_={"Keyword": "kw", "IDs": ["rid"], "Status": ["Running"]},
+        )
+
+    def test_run_tasks_handle(self):
+        args = SimpleNamespace(
+            workspace_name="ws",
+            run_id="rid",
+            page_number=1,
+            page_size=0,
+            ak="ak",
+            sk="sk",
+            endpoint="ep",
+        )
+        with patch("bioos.cli.run.login_with_args"), \
+                patch("bioos.cli.run.resolve_workspace", return_value=("wid", {})), \
+                patch("bioos.cli.run.Run.list_tasks", return_value={"Items": []}) as mocked:
+            result = run_commands.handle_tasks(args)
+        self.assertEqual(result, {"Items": []})
+        mocked.assert_called_once_with(
+            workspace_id="wid",
+            run_id="rid",
+            page_number=1,
+            page_size=0,
+        )
+
+    def test_run_metric_data_handle(self):
+        args = SimpleNamespace(
+            workspace_name="ws",
+            run_id="rid",
+            task_name="task.name",
+            period="60s",
+            start_time=100,
+            end_time=200,
+            ak="ak",
+            sk="sk",
+            endpoint="ep",
+        )
+        with patch("bioos.cli.run.login_with_args"), \
+                patch("bioos.cli.run.resolve_workspace", return_value=("wid", {})), \
+                patch("bioos.cli.run.Run.get_task_metric_data_for_run", return_value={"Status": "Running"}) as mocked:
+            result = run_commands.handle_metric_data(args)
+        self.assertEqual(result, {"Status": "Running"})
+        mocked.assert_called_once_with(
+            workspace_id="wid",
+            run_id="rid",
+            name="task.name",
+            period="60s",
+            start_time=100,
+            end_time=200,
+        )
 
     def test_generate_inputs_json_template_handle(self):
         args = SimpleNamespace(workspace_name="ws", workflow_name="wf")
@@ -207,6 +283,16 @@ class TestCliHandlers(unittest.TestCase):
             result = check_ies_status.handle(args)
         self.assertEqual(result["status"], "Running")
         self.assertEqual(result["list_record"], {"Name": "ies"})
+
+    def test_list_ies_apps_handle(self):
+        args = SimpleNamespace(workspace_name="ws")
+        ws = MagicMock()
+        ws.webinstanceapps.list.return_value = MagicMock()
+        with patch("bioos.cli.list_ies_apps.workspace_context_from_args", return_value=("wid", ws)), \
+                patch("bioos.cli.list_ies_apps.dataframe_records", return_value=[{"Name": "ies"}]):
+            result = list_ies_apps.handle(args)
+        ws.webinstanceapps.list.assert_called_once_with()
+        self.assertEqual(result, [{"Name": "ies"}])
 
     def test_get_ies_events_handle(self):
         args = SimpleNamespace(workspace_name="ws", ies_name="ies")
@@ -620,6 +706,83 @@ class TestCliRootAndAuth(unittest.TestCase):
                     "--output",
                     "json",
                 ]
+            )
+
+        self.assertEqual(exit_code, 0)
+        mocked.assert_called_once()
+
+    def test_root_run_list_dispatches_to_existing_handler(self):
+        with patch("bioos.cli.run.handle_list", return_value={"Items": []}) as mocked:
+            exit_code = cli_main.main(
+                [
+                    "run",
+                    "list",
+                    "--workspace-name",
+                    "ws",
+                    "--submission-id",
+                    "sid",
+                    "--run-id",
+                    "rid",
+                    "--status",
+                    "Running",
+                    "--output",
+                    "json",
+                ]
+            )
+
+        self.assertEqual(exit_code, 0)
+        mocked.assert_called_once()
+
+    def test_root_run_tasks_dispatches_to_existing_handler(self):
+        with patch("bioos.cli.run.handle_tasks", return_value={"Items": []}) as mocked:
+            exit_code = cli_main.main(
+                [
+                    "run",
+                    "tasks",
+                    "--workspace-name",
+                    "ws",
+                    "--run-id",
+                    "rid",
+                    "--page-size",
+                    "0",
+                    "--output",
+                    "json",
+                ]
+            )
+
+        self.assertEqual(exit_code, 0)
+        mocked.assert_called_once()
+
+    def test_root_run_metric_data_dispatches_to_existing_handler(self):
+        with patch("bioos.cli.run.handle_metric_data", return_value={"Status": "Running"}) as mocked:
+            exit_code = cli_main.main(
+                [
+                    "run",
+                    "metric-data",
+                    "--workspace-name",
+                    "ws",
+                    "--run-id",
+                    "rid",
+                    "--task-name",
+                    "task.name",
+                    "--period",
+                    "60s",
+                    "--start-time",
+                    "100",
+                    "--end-time",
+                    "200",
+                    "--output",
+                    "json",
+                ]
+            )
+
+        self.assertEqual(exit_code, 0)
+        mocked.assert_called_once()
+
+    def test_root_ies_list_dispatches_to_existing_handler(self):
+        with patch("bioos.cli.list_ies_apps.handle", return_value=[{"Name": "ies"}]) as mocked:
+            exit_code = cli_main.main(
+                ["ies", "list", "--workspace-name", "ws", "--output", "json"]
             )
 
         self.assertEqual(exit_code, 0)

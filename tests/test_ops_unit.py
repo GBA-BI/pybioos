@@ -8,10 +8,11 @@ from unittest.mock import MagicMock, patch
 
 from requests.exceptions import SSLError
 
-from bioos.ops import docker_build, dockstore, workspace_files
+from bioos.ops import docker_build, dockstore, formatters, workspace_files
 from bioos.internal.tos import TOSHandler
 from bioos.resource.files import FileResource
 from bioos.resource.usage import UsageResource
+from bioos.resource.workflows import Run
 from bioos.resource.workspaces import Workspace
 from bioos.service.BioOsService import BioOsService
 from network import config as repository_internal
@@ -88,6 +89,27 @@ class TestOpsHelpers(unittest.TestCase):
         self.assertTrue(result["success"])
         self.assertEqual(result["count"], 1)
 
+    def test_dataframe_records_converts_missing_values_to_none(self):
+        import pandas as pd
+
+        df = pd.DataFrame.from_records([{
+            "Name": "ies",
+            "Description": float("nan"),
+            "Status": {
+                "State": "Running",
+                "Message": float("nan"),
+            },
+        }])
+
+        self.assertEqual(formatters.dataframe_records(df), [{
+            "Name": "ies",
+            "Description": None,
+            "Status": {
+                "State": "Running",
+                "Message": None,
+            },
+        }])
+
     def test_fetch_wdl_from_dockstore_url(self):
         with tempfile.TemporaryDirectory() as tmpdir, \
                 patch("bioos.ops.dockstore._get_published_workflows", return_value=[{
@@ -117,7 +139,12 @@ class TestOpsHelpers(unittest.TestCase):
             ws = MagicMock()
             ws.files.s3_urls.return_value = ["s3://bioos-wid/__dashboard__.md"]
             ws.files.tos_handler.object_exists.return_value = False
-            ws.files.tos_handler.upload_objects.return_value = []
+            ws.files.tos_handler.build_upload_plan.return_value = [{
+                "source": str(dashboard),
+                "key": "__dashboard__.md",
+                "from_directory": False,
+            }]
+            ws.files.tos_handler.upload_planned_objects.return_value = []
             with patch("bioos.ops.workspace_files.login_to_bioos"), \
                     patch("bioos.ops.workspace_files.resolve_workspace", return_value=("wid", {})), \
                     patch("bioos.bioos.workspace", return_value=ws):
@@ -134,7 +161,19 @@ class TestOpsHelpers(unittest.TestCase):
             ws = MagicMock()
             ws.files.s3_urls.side_effect = lambda keys: [f"s3://bioos-wid/{keys[0]}"]
             ws.files.tos_handler.object_exists.side_effect = [True, False]
-            ws.files.tos_handler.upload_objects.return_value = []
+            ws.files.tos_handler.build_upload_plan.return_value = [
+                {
+                    "source": str(local_a),
+                    "key": "input_provision/a.txt",
+                    "from_directory": False,
+                },
+                {
+                    "source": str(local_b),
+                    "key": "input_provision/b.txt",
+                    "from_directory": False,
+                },
+            ]
+            ws.files.tos_handler.upload_planned_objects.return_value = []
 
             with patch("bioos.ops.workspace_files.login_to_bioos"), \
                     patch("bioos.ops.workspace_files.resolve_workspace", return_value=("wid", {})), \
@@ -157,10 +196,12 @@ class TestOpsHelpers(unittest.TestCase):
         self.assertEqual(result["workspace_id"], "wid")
         self.assertEqual(result["uploaded_count"], 1)
         self.assertEqual(result["skipped_count"], 1)
-        ws.files.tos_handler.upload_objects.assert_called_once_with(
-            files_to_upload=[str(local_b)],
-            target_path="input_provision/",
-            flatten=True,
+        ws.files.tos_handler.upload_planned_objects.assert_called_once_with(
+            upload_plan=[{
+                "source": str(local_b),
+                "key": "input_provision/b.txt",
+                "s3_url": "s3://bioos-wid/input_provision/b.txt",
+            }],
             checkpoint_dir=str(Path(tmpdir) / "checkpoints"),
             max_retries=5,
             task_num=8,
@@ -173,7 +214,12 @@ class TestOpsHelpers(unittest.TestCase):
             ws = MagicMock()
             ws.files.s3_urls.side_effect = lambda keys: [f"s3://bioos-wid/{keys[0]}"]
             ws.files.tos_handler.object_exists.return_value = False
-            ws.files.tos_handler.upload_objects.return_value = []
+            ws.files.tos_handler.build_upload_plan.return_value = [{
+                "source": str(local_a),
+                "key": "input_provision/a.txt",
+                "from_directory": False,
+            }]
+            ws.files.tos_handler.upload_planned_objects.return_value = []
 
             result = workspace_files._upload_local_files_with_workspace(
                 ws=ws,
@@ -190,7 +236,71 @@ class TestOpsHelpers(unittest.TestCase):
 
         self.assertTrue(result["success"])
         self.assertEqual(result["uploaded_count"], 1)
-        ws.files.tos_handler.upload_objects.assert_called_once()
+        ws.files.tos_handler.upload_planned_objects.assert_called_once()
+
+    def test_upload_local_directory_with_workspace_preserves_structure(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir) / "data"
+            nested = root / "nested"
+            nested.mkdir(parents=True)
+            local_a = root / "a.txt"
+            local_b = nested / "b.txt"
+            local_a.write_text("a", encoding="utf-8")
+            local_b.write_text("b", encoding="utf-8")
+
+            ws = MagicMock()
+            ws.files.s3_urls.side_effect = lambda keys: [f"s3://bioos-wid/{keys[0]}"]
+            ws.files.tos_handler = TOSHandler(client=MagicMock(), bucket="bucket")
+            ws.files.tos_handler.upload_planned_objects = MagicMock(return_value=[])
+
+            result = workspace_files._upload_local_files_with_workspace(
+                ws=ws,
+                workspace_id="wid",
+                workspace_name="ws",
+                sources=[str(root)],
+                target="input_provision/",
+                flatten=False,
+                skip_existing=False,
+                checkpoint_dir=str(Path(tmpdir) / "checkpoints"),
+                max_retries=2,
+                task_num=4,
+            )
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result["uploaded_count"], 2)
+        uploaded_keys = [item["key"] for item in result["uploaded_files"]]
+        self.assertEqual(uploaded_keys, [
+            "input_provision/data/a.txt",
+            "input_provision/data/nested/b.txt",
+        ])
+        ws.files.tos_handler.upload_planned_objects.assert_called_once()
+
+    def test_upload_local_directory_flatten_detects_conflicting_keys(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir) / "data"
+            nested_a = root / "one"
+            nested_b = root / "two"
+            nested_a.mkdir(parents=True)
+            nested_b.mkdir(parents=True)
+            (nested_a / "sample.txt").write_text("a", encoding="utf-8")
+            (nested_b / "sample.txt").write_text("b", encoding="utf-8")
+
+            ws = MagicMock()
+            ws.files.tos_handler = TOSHandler(client=MagicMock(), bucket="bucket")
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "Multiple local files map to target key 'input_provision/sample.txt'",
+            ):
+                workspace_files._upload_local_files_with_workspace(
+                    ws=ws,
+                    workspace_id="wid",
+                    workspace_name="ws",
+                    sources=[str(root)],
+                    target="input_provision/",
+                    flatten=True,
+                    skip_existing=False,
+                )
 
     def test_tos_handler_upload_objects_uses_checkpoint_and_retries(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -219,6 +329,35 @@ class TestOpsHelpers(unittest.TestCase):
         self.assertEqual(first_call["task_num"], 4)
         self.assertTrue(first_call["enable_checkpoint"])
         self.assertTrue(first_call["checkpoint_file"].endswith(".upload.ckpt"))
+
+    def test_file_resource_upload_accepts_directory(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir) / "data"
+            root.mkdir()
+            local_file = root / "a.txt"
+            local_file.write_text("a", encoding="utf-8")
+
+            resource = FileResource.__new__(FileResource)
+            resource.tos_handler = TOSHandler(client=MagicMock(), bucket="bucket")
+            resource.tos_handler.upload_planned_objects = MagicMock(return_value=[])
+
+            success = resource.upload(
+                sources=str(root),
+                target="input_provision/",
+                flatten=False,
+            )
+
+        self.assertTrue(success)
+        resource.tos_handler.upload_planned_objects.assert_called_once_with(
+            upload_plan=[{
+                "source": str(local_file),
+                "key": "input_provision/data/a.txt",
+                "from_directory": True,
+            }],
+            checkpoint_dir="",
+            max_retries=3,
+            task_num=10,
+        )
 
     def test_file_resource_download_accepts_workspace_s3_url(self):
         resource = FileResource.__new__(FileResource)
@@ -890,6 +1029,88 @@ class TestOpsHelpers(unittest.TestCase):
                 "This usage API is only available to the account owner",
             ):
                 usage.list_user_resource_usage(1, 2)
+
+    def test_bioos_service_registers_get_task_metric_data(self):
+        api_info = BioOsService.get_api_info()
+        self.assertIn("GetTaskMetricData", api_info)
+
+    def test_run_list_runs_builds_request(self):
+        response = {"Items": []}
+
+        with patch("bioos.resource.workflows.Config.service") as service_mock:
+            service_mock.return_value.list_runs.return_value = response
+            result = Run.list_runs(
+                workspace_id="wid",
+                submission_id="sid",
+                page_number=2,
+                page_size=50,
+                filter_={"Status": ["Running"]},
+            )
+
+        self.assertEqual(result, response)
+        service_mock.return_value.list_runs.assert_called_once_with(
+            {
+                "SubmissionID": "sid",
+                "WorkspaceID": "wid",
+                "PageNumber": 2,
+                "PageSize": 50,
+                "Filter": {"Status": ["Running"]},
+            }
+        )
+
+    def test_run_list_tasks_builds_request(self):
+        response = {"Items": []}
+
+        with patch("bioos.resource.workflows.Config.service") as service_mock:
+            service_mock.return_value.list_tasks.return_value = response
+            result = Run.list_tasks(
+                workspace_id="wid",
+                run_id="rid",
+                page_number=1,
+                page_size=0,
+            )
+
+        self.assertEqual(result, response)
+        service_mock.return_value.list_tasks.assert_called_once_with(
+            {
+                "RunID": "rid",
+                "WorkspaceID": "wid",
+                "PageNumber": 1,
+                "PageSize": 0,
+            }
+        )
+
+    def test_run_get_task_metric_data_builds_request(self):
+        run = Run.__new__(Run)
+        run.workspace_id = "wid"
+        run.id = "rid"
+        response = {
+            "Status": "Running",
+            "DataPointsCPUUsage": [{"Timestamp": 1, "Value": 0.5}],
+        }
+
+        with patch("bioos.resource.workflows.Config.service") as service_mock:
+            service_mock.return_value.get_task_metric_data.return_value = response
+            result = run.get_task_metric_data(
+                name=" task.name ",
+                period="60s",
+                start_time="100",
+                end_time=200,
+                top={"RequestId": "req-1"},
+            )
+
+        self.assertEqual(result, response)
+        service_mock.return_value.get_task_metric_data.assert_called_once_with(
+            {
+                "Name": "task.name",
+                "RunID": "rid",
+                "Period": "60s",
+                "StartTime": 100,
+                "EndTime": 200,
+                "WorkspaceID": "wid",
+                "Top": {"RequestId": "req-1"},
+            }
+        )
 
     def test_workspace_list_members_defaults_to_in_workspace_filter(self):
         workspace = Workspace.__new__(Workspace)

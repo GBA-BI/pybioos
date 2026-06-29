@@ -95,6 +95,68 @@ class Run(metaclass=SingletonType):  # 单例模式，why
         self._tasks: pd.DataFrame = None
         self.sync()  # 这里会初始化上方的UNKNOWN
 
+    @staticmethod
+    def list_runs(workspace_id: str,
+                  submission_id: str,
+                  page_number: Optional[int] = None,
+                  page_size: Optional[int] = None,
+                  filter_: Optional[dict] = None,
+                  top: Optional[dict] = None) -> dict:
+        """Lists runs under a submission."""
+        params = {
+            "SubmissionID": Run._normalize_required_string(submission_id, "submission_id"),
+            "WorkspaceID": Run._normalize_required_string(workspace_id, "workspace_id"),
+        }
+        if page_number is not None:
+            params["PageNumber"] = int(page_number)
+        if page_size is not None:
+            params["PageSize"] = int(page_size)
+        if filter_:
+            params["Filter"] = filter_
+        if top is not None:
+            params["Top"] = top
+        return Config.service().list_runs(params)
+
+    @staticmethod
+    def list_tasks(workspace_id: str,
+                   run_id: str,
+                   page_number: Optional[int] = None,
+                   page_size: Optional[int] = None,
+                   top: Optional[dict] = None) -> dict:
+        """Lists tasks under a run."""
+        params = {
+            "RunID": Run._normalize_required_string(run_id, "run_id"),
+            "WorkspaceID": Run._normalize_required_string(workspace_id, "workspace_id"),
+        }
+        if page_number is not None:
+            params["PageNumber"] = int(page_number)
+        if page_size is not None:
+            params["PageSize"] = int(page_size)
+        if top is not None:
+            params["Top"] = top
+        return Config.service().list_tasks(params)
+
+    @staticmethod
+    def get_task_metric_data_for_run(workspace_id: str,
+                                     run_id: str,
+                                     name: str,
+                                     period: str,
+                                     start_time: int,
+                                     end_time: int,
+                                     top: Optional[dict] = None) -> dict:
+        """Gets metric data for a task under a run."""
+        params = {
+            "Name": Run._normalize_required_string(name, "name"),
+            "RunID": Run._normalize_required_string(run_id, "run_id"),
+            "Period": Run._normalize_required_string(period, "period"),
+            "StartTime": Run._normalize_metric_time(start_time, "start_time"),
+            "EndTime": Run._normalize_metric_time(end_time, "end_time"),
+            "WorkspaceID": Run._normalize_required_string(workspace_id, "workspace_id"),
+        }
+        if top is not None:
+            params["Top"] = top
+        return Config.service().get_task_metric_data(params)
+
     @property
     def status(self) -> RUN_STATUS:
         """Returns the Run status.
@@ -166,14 +228,45 @@ class Run(metaclass=SingletonType):  # 单例模式，why
             res = self._tasks.query("Status=='Running'")
             if res.empty:
                 return self._tasks
-        tasks = Config.service().list_tasks({
-            "RunID": self.id,
-            "WorkspaceID": self.workspace_id
-        }).get("Items")
+        tasks = Run.list_tasks(
+            workspace_id=self.workspace_id,
+            run_id=self.id,
+        ).get("Items")
         if len(tasks) == 0:
             return None
         self._tasks = pd.DataFrame.from_records(tasks)
         return self._tasks
+
+    def get_task_metric_data(self,
+                             name: str,
+                             period: str,
+                             start_time: int,
+                             end_time: int,
+                             top: Optional[dict] = None) -> dict:
+        """Returns metric data for a task in this Run.
+
+        :param name: Task name
+        :type name: str
+        :param period: Metric interval granularity
+        :type period: str
+        :param start_time: Start timestamp
+        :type start_time: int
+        :param end_time: End timestamp
+        :type end_time: int
+        :param top: Optional top-level request metadata
+        :type top: dict
+        :return: Task metric data
+        :rtype: dict
+        """
+        return Run.get_task_metric_data_for_run(
+            workspace_id=self.workspace_id,
+            run_id=self.id,
+            name=name,
+            period=period,
+            start_time=start_time,
+            end_time=end_time,
+            top=top,
+        )
 
     @property
     def engine_run_id(self) -> str:
@@ -212,6 +305,20 @@ class Run(metaclass=SingletonType):  # 单例模式，why
             self._duration = item.get("Duration")
             self._log = item.get("Log")
             self._error = item.get("Message")
+
+    @staticmethod
+    def _normalize_metric_time(value: int, name: str) -> int:
+        try:
+            return int(value)
+        except (TypeError, ValueError) as exc:
+            raise ParameterError(name, "must be an integer timestamp") from exc
+
+    @staticmethod
+    def _normalize_required_string(value: str, name: str) -> str:
+        normalized = str(value).strip() if value is not None else ""
+        if not normalized:
+            raise ParameterError(name)
+        return normalized
 
 
 class Submission(metaclass=SingletonType):  # 与run class行为相同
@@ -948,4 +1055,3 @@ class Workflow(metaclass=SingletonType):
         submission_id = Config.service().create_submission(params).get("ID")
 
         return Submission(self.workspace_id, submission_id).runs
-

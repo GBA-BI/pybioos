@@ -12,10 +12,25 @@ def build_args():
         "source",
         required=True,
         action="append",
-        help="Local file path. Can be specified multiple times.",
+        help=(
+            "Local file or directory path. Repeat this option to upload multiple "
+            "files or directories."
+        ),
     )
     add_argument(parser, "target", required=False, default="", help="Target prefix path in the workspace bucket.")
-    add_bool_argument(parser, "flatten", default=True, help_text="Flatten local paths during upload.")
+    add_bool_argument(
+        parser,
+        "flatten",
+        default=True,
+        help_text=(
+            "Flatten uploaded paths. For directory upload, the default --flatten "
+            "uploads files by basename under target; use --no-flatten to preserve "
+            "the directory tree under target."
+        ),
+        negative_help_text=(
+            "Preserve directory tree under target when uploading directories."
+        ),
+    )
     add_bool_argument(parser, "skip_existing", default=False, help_text="Skip files whose target object already exists.")
     add_argument(
         parser,
