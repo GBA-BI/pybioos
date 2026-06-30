@@ -20,6 +20,22 @@ UNKNOWN = "Unknown"
 SUBMISSION_STATUS = Literal["Succeeded", "Failed", "Running", "Pending"]
 RUN_STATUS = Literal["Succeeded", "Failed", "Running", "Pending"]
 WORKFLOW_LANGUAGE = Literal["WDL"]
+GIT_WORKFLOW_IMPORT_DISABLED_MESSAGE = (
+    "Git URL workflow import is currently disabled. Please clone or download "
+    "the repository first, then import a local .wdl file or a local directory "
+    "containing WDL files."
+)
+_GIT_WORKFLOW_IMPORT_ENV = "BIOOS_ENABLE_GIT_WORKFLOW_IMPORT"
+
+
+def is_git_workflow_source(source: str) -> bool:
+    value = (source or "").strip().lower()
+    return value.startswith(("http://", "https://", "git://", "ssh://", "git@"))
+
+
+def _git_workflow_import_enabled() -> bool:
+    value = os.environ.get(_GIT_WORKFLOW_IMPORT_ENV, "")
+    return value.lower() in {"1", "true", "yes", "on"}
 
 
 def zip_files(source_files, zip_type='base64'):
@@ -499,10 +515,10 @@ class WorkflowResource(metaclass=SingletonType):
         ::
 
             ws = bioos.workspace("foo")
-            ws.workflows.import_workflow(source = "http://foo.git", name = "bar",  description = "",
-            language = "WDL", tag = "baz", token = "xxxxxxxx", main_workflow_path = "aaa/bbb.wdl")
+            ws.workflows.import_workflow(source = "./workflow.wdl", name = "bar", description = "",
+            language = "WDL")
 
-        :param source: git source of workflow
+        :param source: local WDL file path or local directory containing WDL files
         :type source: str
         :param name: The name of specified workflow
         :type name: str
@@ -510,15 +526,20 @@ class WorkflowResource(metaclass=SingletonType):
         :type description: str
         :param language: The language of specified workflow
         :type language: str
-        :param tag: The tag of specified workflow
+        :param tag: Deprecated. Git URL workflow import is currently disabled;
+            this value is ignored for local WDL imports.
         :type tag: str
-        :param token: The token of specified workflow
+        :param token: Deprecated. Reserved for the disabled Git URL import path;
+            not needed for local WDL imports.
         :type token: str
         :param main_workflow_path: Main path of specified workflow
         :type main_workflow_path: str
         :return: Workflow ID
         :rtype: str
         """
+        if is_git_workflow_source(source) and not _git_workflow_import_enabled():
+            raise ParameterError("source", GIT_WORKFLOW_IMPORT_DISABLED_MESSAGE)
+
         if name:  # 流程是否存在
             exist = Config.service().check_workflow({
                 "WorkspaceID": self.workspace_id,
@@ -534,6 +555,8 @@ class WorkflowResource(metaclass=SingletonType):
             raise ParameterError("language", f"Unsupported language: '{language}'. Only 'WDL' is supported.")
 
         if source.startswith("http://") or source.startswith("https://"):
+            # Legacy Git import path retained behind BIOOS_ENABLE_GIT_WORKFLOW_IMPORT
+            # for maintainers while public CLI/SDK usage defaults to local WDL only.
             params = {
                 "WorkspaceID": self.workspace_id,
                 "Name": name,
@@ -556,9 +579,11 @@ class WorkflowResource(metaclass=SingletonType):
                     if file.endswith('.wdl'):
                         full_path = os.path.join(root, file)
                         relative_path = os.path.relpath(full_path, source)  # 获取文件相对于source的相对路径。
+                        with open(full_path, "rb") as handle:
+                            origin_file = handle.read()
                         source_files.append({
                             "name": relative_path,  # 使用相对路径
-                            "originFile": open(full_path, "rb").read()
+                            "originFile": origin_file
                         })
 
             if not source_files:
@@ -566,9 +591,20 @@ class WorkflowResource(metaclass=SingletonType):
 
             # 确保主工作流路径是相对路径
             if main_workflow_path:
-                if not os.path.exists(main_workflow_path):
+                source_abs = os.path.abspath(source)
+                if os.path.isabs(main_workflow_path):
+                    main_abs = os.path.abspath(main_workflow_path)
+                else:
+                    main_abs = os.path.abspath(os.path.join(source_abs, main_workflow_path))
+
+                if not os.path.isfile(main_abs):
                     raise ParameterError("main_workflow_path", f"Main workflow file {main_workflow_path} not found")
-                main_relative = os.path.relpath(main_workflow_path, source)
+                if os.path.commonpath([source_abs, main_abs]) != source_abs:
+                    raise ParameterError(
+                        "main_workflow_path",
+                        "Main workflow file must be inside the workflow source directory",
+                    )
+                main_relative = os.path.relpath(main_abs, source_abs)
             else:
                 main_relative = None
 
@@ -583,16 +619,18 @@ class WorkflowResource(metaclass=SingletonType):
                 "Content": zip_base64,
             }
             if main_relative:
-                params["MainWorkflowPath"] = os.path.basename(main_relative)
+                params["MainWorkflowPath"] = main_relative
             if token:
                 params["Token"] = token
 
             return Config.service().create_workflow(params)
         #单文件上传
         elif os.path.isfile(source) and source.endswith('.wdl'):
+            with open(source, "rb") as handle:
+                origin_file = handle.read()
             source_files = [{
                 "name": os.path.basename(source),
-                "originFile": open(source, "rb").read()
+                "originFile": origin_file
             }]
             zip_base64 = zip_files(source_files, 'base64')
 

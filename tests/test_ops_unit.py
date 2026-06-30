@@ -10,9 +10,10 @@ from requests.exceptions import SSLError
 
 from bioos.ops import docker_build, dockstore, formatters, workspace_files
 from bioos.internal.tos import TOSHandler
+from bioos.errors import ParameterError
 from bioos.resource.files import FileResource
 from bioos.resource.usage import UsageResource
-from bioos.resource.workflows import Run
+from bioos.resource.workflows import Run, WorkflowResource
 from bioos.resource.workspaces import Workspace
 from bioos.service.BioOsService import BioOsService
 from network import config as repository_internal
@@ -51,6 +52,54 @@ class TestOpsHelpers(unittest.TestCase):
             )
             result = docker_build.check_build_status_request("task-1")
         self.assertEqual(result, {"Status": "Running"})
+
+    def test_workflow_import_rejects_git_url_by_default(self):
+        workflows = WorkflowResource("workspace-id")
+
+        with patch.object(BioOsService, "check_workflow") as check_mock, \
+                self.assertRaisesRegex(ParameterError, "Git URL workflow import is currently disabled"):
+            workflows.import_workflow(
+                source="https://github.com/example/workflow.git",
+                name="wf",
+                description="desc",
+            )
+
+        check_mock.assert_not_called()
+
+    def test_workflow_import_directory_preserves_nested_main_path(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            workflows_dir = source / "workflows"
+            tasks_dir = source / "tasks"
+            workflows_dir.mkdir()
+            tasks_dir.mkdir()
+            (workflows_dir / "main.wdl").write_text(
+                'version 1.0\nimport "../tasks/echo.wdl" as echo_tasks\nworkflow wf {}\n'
+            )
+            (tasks_dir / "echo.wdl").write_text("version 1.0\ntask echo_name { command <<< echo hi >>> }\n")
+
+            cases = [
+                ("absolute", str(workflows_dir / "main.wdl")),
+                ("relative", "workflows/main.wdl"),
+            ]
+            for label, main_path in cases:
+                with self.subTest(label=label), \
+                        patch("bioos.resource.workflows.Config.service") as service_mock:
+                    service = service_mock.return_value
+                    service.check_workflow.return_value = {"IsNameExist": False}
+                    service.create_workflow.return_value = "wf-id"
+
+                    result = WorkflowResource(f"workspace-{label}").import_workflow(
+                        source=str(source),
+                        name=f"wf-{label}",
+                        description="nested main path",
+                        main_workflow_path=main_path,
+                    )
+
+                    self.assertEqual(result, "wf-id")
+                    params = service.create_workflow.call_args.args[0]
+                    self.assertEqual(params["SourceType"], "file")
+                    self.assertEqual(params["MainWorkflowPath"], "workflows/main.wdl")
 
     def test_parse_workflow_url(self):
         org, workflow = dockstore.parse_workflow_url(

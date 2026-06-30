@@ -36,7 +36,7 @@ class TestWorkflows(BaseInit):
     list_workflows_val = {'Items': [
         {'ID': workflow_id, 'Name': workflow_name, 'Description': '[dockstore]',
          'CreateTime': 1670929870, 'UpdateTime': 1671032374, 'Language': 'WDL',
-         'Source': 'https://github.com/fake/hello.git', 'Tag': 'main',
+         'Source': './hello.wdl', 'Tag': '',
          'MainWorkflowPath': 'hello.wdl',
          'Status': {'Phase': 'Failed',
                     'Message': 'job failed: Reason=BackoffLimitExceeded, '
@@ -143,8 +143,8 @@ class TestWorkflows(BaseInit):
                      'UpdateTime': pandas.to_datetime(1671032374,
                                                       unit='ms',
                                                       origin=pandas.Timestamp('2018-07-01')),
-                     'Language': 'WDL', 'Source': 'https://github.com/fake/hello.git',
-                     'Tag': 'main', 'MainWorkflowPath': 'hello.wdl'}
+                     'Language': 'WDL', 'Source': './hello.wdl',
+                     'Tag': '', 'MainWorkflowPath': 'hello.wdl'}
                 ]))
                 success_list_workflows.assert_has_calls([
                     mock.call({
@@ -169,10 +169,16 @@ class TestWorkflows(BaseInit):
         with patch.object(BioOsService, "check_workflow",
                           return_value={'IsNameExist': False}) as success_check:
             with patch.object(BioOsService, "create_workflow",
-                              return_value={'ID': self.workflow_id}) as success_create:
-                workflow_id = self.workflows.import_workflow("https://github.com/fake/hello.git",
-                                                             self.workflow_name, "WDL", "main",
-                                                             "hello.wdl", "[dockstore]")
+                              return_value=self.workflow_id) as success_create:
+                with patch("bioos.resource.workflows.os.path.isfile",
+                           return_value=True):
+                    with patch("bioos.resource.workflows.zip_files",
+                               return_value="zip-content"):
+                        with patch("builtins.open",
+                                   mock.mock_open(read_data=b"workflow {}")):
+                            workflow_id = self.workflows.import_workflow("./hello.wdl",
+                                                                         self.workflow_name,
+                                                                         "[dockstore]")
                 self.assertEqual(workflow_id, self.workflow_id)
         success_check.assert_called_once_with({
             "WorkspaceID": self.workspace_id,
@@ -183,8 +189,8 @@ class TestWorkflows(BaseInit):
             "Name": self.workflow_name,
             "Description": "[dockstore]",
             "Language": "WDL",
-            "Source": "https://github.com/fake/hello.git",
-            "Tag": "main",
+            "SourceType": "file",
+            "Content": "zip-content",
             "MainWorkflowPath": "hello.wdl",
         })
 
@@ -192,8 +198,8 @@ class TestWorkflows(BaseInit):
                           return_value={'IsNameExist': True}) as success_check:
             with patch.object(BioOsService, "create_workflow") as miss_create:
                 try:
-                    self.workflows.import_workflow("https://github.com/fake/hello.git",
-                                                   self.workflow_name, "WDL", "main", "hello.wdl",
+                    self.workflows.import_workflow("./hello.wdl",
+                                                   self.workflow_name,
                                                    "[dockstore]")
                 except ConflictError as e:
                     self.assertEqual(e.message, f"parameter 'name' conflicts: "
