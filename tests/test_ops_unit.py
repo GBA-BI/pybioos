@@ -101,6 +101,70 @@ class TestOpsHelpers(unittest.TestCase):
                     self.assertEqual(params["SourceType"], "file")
                     self.assertEqual(params["MainWorkflowPath"], "workflows/main.wdl")
 
+    def test_workflow_update_metadata_only_builds_request(self):
+        workflows = WorkflowResource("workspace-id")
+
+        with patch("bioos.resource.workflows.Config.service") as service_mock:
+            service_mock.return_value.update_workflow.return_value = {}
+            result = workflows.update_workflow(
+                workflow_id="wf-id",
+                name="new-name",
+                description="new desc",
+            )
+
+        self.assertEqual(result, {})
+        service_mock.return_value.update_workflow.assert_called_once_with({
+            "WorkspaceID": "workspace-id",
+            "ID": "wf-id",
+            "Name": "new-name",
+            "Description": "new desc",
+        })
+
+    def test_workflow_update_directory_preserves_nested_main_path(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            workflows_dir = source / "workflows"
+            tasks_dir = source / "tasks"
+            workflows_dir.mkdir()
+            tasks_dir.mkdir()
+            (workflows_dir / "main.wdl").write_text(
+                'version 1.0\nimport "../tasks/echo.wdl" as echo_tasks\nworkflow wf {}\n'
+            )
+            (tasks_dir / "echo.wdl").write_text("version 1.0\ntask echo_name { command <<< echo hi >>> }\n")
+
+            with patch("bioos.resource.workflows.Config.service") as service_mock:
+                service_mock.return_value.update_workflow.return_value = {}
+                result = WorkflowResource("workspace-update").update_workflow(
+                    workflow_id="wf-id",
+                    name="wf-name",
+                    description="replace WDL",
+                    source=str(source),
+                    main_workflow_path="workflows/main.wdl",
+                )
+
+            self.assertEqual(result, {})
+            params = service_mock.return_value.update_workflow.call_args.args[0]
+            self.assertEqual(params["WorkspaceID"], "workspace-update")
+            self.assertEqual(params["ID"], "wf-id")
+            self.assertEqual(params["Name"], "wf-name")
+            self.assertEqual(params["Description"], "replace WDL")
+            self.assertEqual(params["SourceType"], "file")
+            self.assertEqual(params["MainWorkflowPath"], "workflows/main.wdl")
+            self.assertIn("Content", params)
+
+    def test_workflow_update_rejects_git_url_by_default(self):
+        workflows = WorkflowResource("workspace-id")
+
+        with patch("bioos.resource.workflows.Config.service") as service_mock, \
+                self.assertRaisesRegex(ParameterError, "Git URL workflow import is currently disabled"):
+            workflows.update_workflow(
+                workflow_id="wf-id",
+                name="wf-name",
+                source="https://github.com/example/workflow.git",
+            )
+
+        service_mock.return_value.update_workflow.assert_not_called()
+
     def test_parse_workflow_url(self):
         org, workflow = dockstore.parse_workflow_url(
             "https://dockstore.miracle.ac.cn/workflows/git.miracle.ac.cn/gzlab/mrnaseq/mRNAseq"
@@ -1082,6 +1146,17 @@ class TestOpsHelpers(unittest.TestCase):
     def test_bioos_service_registers_get_task_metric_data(self):
         api_info = BioOsService.get_api_info()
         self.assertIn("GetTaskMetricData", api_info)
+
+    def test_bioos_service_registers_update_workflow(self):
+        service = BioOsService.__new__(BioOsService)
+        params = {"WorkspaceID": "wid", "ID": "wf-id", "Name": "wf-name"}
+
+        self.assertIn("UpdateWorkflow", BioOsService.get_api_info())
+        with patch.object(BioOsService, "_BioOsService__request", return_value={}) as request_mock:
+            result = service.update_workflow(params)
+
+        self.assertEqual(result, {})
+        request_mock.assert_called_once_with("UpdateWorkflow", params)
 
     def test_run_list_runs_builds_request(self):
         response = {"Items": []}

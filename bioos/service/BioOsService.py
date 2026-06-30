@@ -187,6 +187,11 @@ class BioOsService(Service):
                 'Action': 'CreateWorkflow',
                 'Version': '2021-03-04'
             }, {}, {}),
+            'UpdateWorkflow':
+            ApiInfo('POST', '/', {
+                'Action': 'UpdateWorkflow',
+                'Version': '2021-03-04'
+            }, {}, {}),
             'CheckCreateWorkflow':
             ApiInfo('POST', '/', {
                 'Action': 'CheckCreateWorkflow',
@@ -356,6 +361,9 @@ class BioOsService(Service):
 
     def create_workflow(self, params):
         return self.__request('CreateWorkflow', params)
+
+    def update_workflow(self, params):
+        return self.__request('UpdateWorkflow', params)
 
     def check_workflow(self, params):
         return self.__request("CheckCreateWorkflow", params)

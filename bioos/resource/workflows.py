@@ -649,6 +649,104 @@ class WorkflowResource(metaclass=SingletonType):
         else:
             raise ParameterError("source",f"Workflow source '{source}' does not exist.")
 
+    def update_workflow(self,
+                        workflow_id: str,
+                        name: str,
+                        description: Optional[str] = None,
+                        source: str = "",
+                        main_workflow_path: str = "",
+                        tag: str = "",
+                        token: str = "") -> dict:
+        """Updates workflow metadata and optionally replaces local WDL content."""
+        if not workflow_id:
+            raise ParameterError("workflow_id", workflow_id)
+        if not name:
+            raise ParameterError("name", name)
+
+        params = {
+            "WorkspaceID": self.workspace_id,
+            "ID": workflow_id,
+            "Name": name,
+        }
+        if description is not None:
+            params["Description"] = description
+
+        if not source:
+            return Config.service().update_workflow(params)
+
+        if is_git_workflow_source(source) and not _git_workflow_import_enabled():
+            raise ParameterError("source", GIT_WORKFLOW_IMPORT_DISABLED_MESSAGE)
+
+        if source.startswith("http://") or source.startswith("https://"):
+            params.update({
+                "Source": source,
+                "Tag": tag,
+                "MainWorkflowPath": main_workflow_path,
+                "SourceType": "git",
+            })
+            if token:
+                params["Token"] = token
+            return Config.service().update_workflow(params)
+
+        if os.path.isdir(source):
+            source_files = []
+            for root, _, files in os.walk(source):
+                for file in files:
+                    if file.endswith('.wdl'):
+                        full_path = os.path.join(root, file)
+                        relative_path = os.path.relpath(full_path, source)
+                        with open(full_path, "rb") as handle:
+                            origin_file = handle.read()
+                        source_files.append({
+                            "name": relative_path,
+                            "originFile": origin_file,
+                        })
+
+            if not source_files:
+                raise ParameterError("source", "No WDL files found in the specified folder")
+
+            if main_workflow_path:
+                source_abs = os.path.abspath(source)
+                if os.path.isabs(main_workflow_path):
+                    main_abs = os.path.abspath(main_workflow_path)
+                else:
+                    main_abs = os.path.abspath(os.path.join(source_abs, main_workflow_path))
+
+                if not os.path.isfile(main_abs):
+                    raise ParameterError("main_workflow_path", f"Main workflow file {main_workflow_path} not found")
+                if os.path.commonpath([source_abs, main_abs]) != source_abs:
+                    raise ParameterError(
+                        "main_workflow_path",
+                        "Main workflow file must be inside the workflow source directory",
+                    )
+                main_relative = os.path.relpath(main_abs, source_abs)
+            else:
+                main_relative = None
+
+            params.update({
+                "SourceType": "file",
+                "Content": zip_files(source_files, "base64"),
+            })
+            if main_relative:
+                params["MainWorkflowPath"] = main_relative
+            return Config.service().update_workflow(params)
+
+        if os.path.isfile(source) and source.endswith('.wdl'):
+            with open(source, "rb") as handle:
+                origin_file = handle.read()
+            source_files = [{
+                "name": os.path.basename(source),
+                "originFile": origin_file,
+            }]
+            params.update({
+                "SourceType": "file",
+                "Content": zip_files(source_files, 'base64'),
+                "MainWorkflowPath": os.path.basename(source),
+            })
+            return Config.service().update_workflow(params)
+
+        raise ParameterError("source", f"Workflow source '{source}' does not exist.")
+
     def list(self) -> DataFrame:
         """Lists all workflows' information .
 
