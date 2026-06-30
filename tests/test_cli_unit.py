@@ -35,6 +35,7 @@ from bioos.cli import (
     upload_dashboard_file,
     upload_files_to_workspace,
     usage_metrics,
+    update_workflow,
     update_workspace_members,
 )
 from bioos import bioos_workflow, bw_import, bw_import_status_check, bw_status_check, get_submission_logs as submission_logs_module
@@ -845,6 +846,28 @@ class TestCliRootAndAuth(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         mocked.assert_called_once()
 
+    def test_root_workflow_update_dispatches_to_handler(self):
+        with patch("bioos.cli.update_workflow.handle", return_value={"success": True}) as mocked:
+            exit_code = cli_main.main(
+                [
+                    "workflow",
+                    "update",
+                    "--workspace-name",
+                    "ws",
+                    "--workflow-id",
+                    "wf-id",
+                    "--workflow-name",
+                    "wf",
+                    "--workflow-source",
+                    "main.wdl",
+                    "--output",
+                    "json",
+                ]
+            )
+
+        self.assertEqual(exit_code, 0)
+        mocked.assert_called_once()
+
     def test_root_workflow_import_status_uses_legacy_adapter(self):
         with patch("bioos.bw_import_status_check.handle", return_value="Status: Succeeded") as mocked:
             exit_code = cli_main.main(
@@ -939,6 +962,39 @@ class TestCliRootAndAuth(unittest.TestCase):
             bw_import.handle(args)
 
         login_mock.assert_not_called()
+
+    def test_workflow_update_handle_uses_unified_login(self):
+        args = update_workflow.build_args().parse_args(
+            [
+                "--workspace_name",
+                "ws",
+                "--workflow_id",
+                "wf-id",
+                "--workflow_name",
+                "wf-new",
+                "--workflow_source",
+                "main.wdl",
+                "--main_path",
+                "main.wdl",
+            ]
+        )
+        resource = MagicMock()
+        resource.update_workflow.return_value = {}
+        with patch("bioos.cli.update_workflow.login_to_bioos") as login_mock, \
+                patch("bioos.cli.update_workflow.resolve_workspace", return_value=("wid", {})), \
+                patch("bioos.cli.update_workflow.WorkflowResource", return_value=resource):
+            result = update_workflow.handle(args)
+
+        login_mock.assert_called_once()
+        resource.update_workflow.assert_called_once_with(
+            workflow_id="wf-id",
+            name="wf-new",
+            description=None,
+            source="main.wdl",
+            main_workflow_path="main.wdl",
+        )
+        self.assertTrue(result["success"])
+        self.assertEqual(result["workflow_id"], "wf-id")
 
     def test_legacy_workflow_submit_handle_uses_unified_login(self):
         args = bioos_workflow.build_parser().parse_args(

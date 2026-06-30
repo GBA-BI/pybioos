@@ -31,6 +31,7 @@ from bioos.cli import (
     upload_dashboard_file,
     upload_files_to_workspace,
     usage_metrics,
+    update_workflow,
     update_workspace_members,
 )
 from bioos.cli.common import add_argument, add_auth_arguments, add_bool_argument, add_output_arguments, run_cli
@@ -340,6 +341,30 @@ def _add_workflow_group(subparsers: Any) -> None:
     )
     import_parser.set_defaults(_parser=import_parser, output="text")
     import_parser.set_defaults(handler=bw_import.handle)
+
+    update_parser = workflow_subparsers.add_parser("update", help="Update a workflow in Bio-OS.")
+    add_auth_arguments(update_parser)
+    add_output_arguments(update_parser)
+    add_argument(update_parser, "workspace_name", required=True, help="Workspace name.")
+    add_argument(update_parser, "workflow_id", required=True, help="Workflow ID.")
+    add_argument(update_parser, "workflow_name", required=True, help="Workflow name.")
+    add_argument(update_parser, "workflow_desc", required=False, default=None, help="Workflow description.")
+    add_argument(
+        update_parser,
+        "workflow_source",
+        required=False,
+        default="",
+        help="Optional local .wdl file path or local directory containing WDL files.",
+    )
+    add_argument(
+        update_parser,
+        "main_path",
+        required=False,
+        default="",
+        help="Main workflow file path for local WDL directory updates.",
+    )
+    update_parser.set_defaults(_parser=update_parser)
+    update_parser.set_defaults(handler=update_workflow.handle)
 
     import_status_parser = workflow_subparsers.add_parser(
         "import-status",
