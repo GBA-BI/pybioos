@@ -38,6 +38,7 @@ from bioos.cli import (
     update_workspace_members,
 )
 from bioos import bioos_workflow, bw_import, bw_import_status_check, bw_status_check, get_submission_logs as submission_logs_module
+from bioos.errors import ParameterError
 from bioos.ops import auth as auth_ops
 from network.cli import main as network_cli
 
@@ -920,6 +921,24 @@ class TestCliRootAndAuth(unittest.TestCase):
 
         login_mock.assert_called_once()
         self.assertIn("still validating", result)
+
+    def test_legacy_workflow_import_rejects_git_url(self):
+        args = bw_import.build_parser().parse_args(
+            [
+                "--workspace_name",
+                "ws",
+                "--workflow_name",
+                "wf",
+                "--workflow_source",
+                "https://github.com/example/workflow.git",
+            ]
+        )
+
+        with patch("bioos.bw_import.login_to_bioos") as login_mock, \
+                self.assertRaisesRegex(ParameterError, "Git URL workflow import is currently disabled"):
+            bw_import.handle(args)
+
+        login_mock.assert_not_called()
 
     def test_legacy_workflow_submit_handle_uses_unified_login(self):
         args = bioos_workflow.build_parser().parse_args(

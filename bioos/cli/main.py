@@ -315,9 +315,20 @@ def _add_workflow_group(subparsers: Any) -> None:
     add_output_arguments(import_parser)
     add_argument(import_parser, "workspace_name", required=True, help="Workspace name.")
     add_argument(import_parser, "workflow_name", required=True, help="Workflow name.")
-    add_argument(import_parser, "workflow_source", required=True, help="Local WDL file path or git repository URL.")
+    add_argument(
+        import_parser,
+        "workflow_source",
+        required=True,
+        help="Local .wdl file path or local directory containing WDL files.",
+    )
     add_argument(import_parser, "workflow_desc", required=False, default="", help="Workflow description.")
-    add_argument(import_parser, "main_path", required=False, default="", help="Main workflow file path.")
+    add_argument(
+        import_parser,
+        "main_path",
+        required=False,
+        default="",
+        help="Main workflow file path for local WDL directory imports.",
+    )
     add_bool_argument(import_parser, "monitor", default=False, help_text="Monitor the workflow import status.")
     add_argument(
         import_parser,

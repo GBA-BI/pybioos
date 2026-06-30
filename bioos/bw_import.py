@@ -5,8 +5,13 @@ import time
 
 from bioos import bioos
 from bioos.config import DEFAULT_ENDPOINT
+from bioos.errors import ParameterError
 from bioos.ops.auth import login_to_bioos, resolve_workspace
-from bioos.resource.workflows import WorkflowResource
+from bioos.resource.workflows import (
+    GIT_WORKFLOW_IMPORT_DISABLED_MESSAGE,
+    WorkflowResource,
+    is_git_workflow_source,
+)
 
 
 def get_logger():
@@ -31,16 +36,20 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument('--sk', required=False, help='Secret key for your Bio-OS instance platform account')
     parser.add_argument('--workspace_name', required=True, help='Target workspace name')
     parser.add_argument('--workflow_name', required=True, help='Name for the workflow to be imported')
-    parser.add_argument('--workflow_source', required=True, help='Local WDL file path or git repository URL')
+    parser.add_argument('--workflow_source', required=True,
+                        help='Local .wdl file path or local directory containing WDL files')
     parser.add_argument('--endpoint', help='Bio-OS instance platform endpoint', default=DEFAULT_ENDPOINT)
     parser.add_argument('--workflow_desc', help='Description for the workflow', default='')
-    parser.add_argument('--main_path', help='Main workflow file path (required for git repository)', default='')
+    parser.add_argument('--main_path', help='Main workflow file path for local WDL directory imports', default='')
     parser.add_argument('--monitor', action='store_true', help='Monitor the workflow validation status until completion')
     parser.add_argument('--monitor_interval', type=int, default=60, help='Time interval in seconds for checking workflow status')
     return parser
 
 
 def handle(args) -> str:
+    if is_git_workflow_source(args.workflow_source):
+        raise ParameterError("workflow_source", GIT_WORKFLOW_IMPORT_DISABLED_MESSAGE)
+
     logger = get_logger()
     login_to_bioos(access_key=args.ak, secret_key=args.sk, endpoint=args.endpoint)
     workspace_id, _ = resolve_workspace(args.workspace_name)
